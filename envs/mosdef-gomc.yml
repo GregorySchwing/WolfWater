@@ -1,0 +1,6 @@
+name: mosdef_gomc
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - mosdef-gomc
