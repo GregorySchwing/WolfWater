@@ -41,6 +41,7 @@ log.info """\
 =============================================================================
          output_folder          : ${params.output_folder}
          database_path          : ${params.database_path}
+         path_to_xml            : ${params.path_to_xml}
          """
          .stripIndent()
 
@@ -69,7 +70,8 @@ log.info """\
         //solventData.view()
         liquid_points.view()
         vapor_points.view()
-
+        path_to_xml = Channel.fromPath( params.path_to_xml )
+        build_solvents(liquid_points, path_to_xml)
     } else {
         helpMessage()
     }
