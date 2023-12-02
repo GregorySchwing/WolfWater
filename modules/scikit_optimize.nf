@@ -125,7 +125,7 @@ process create_systems {
     loaded_point = load_point_from_json("${json}")
     print("Loaded point")
     print(loaded_point)
-    
+    quit()
     print("#**********************")
     print("Started: GOMC Charmm Object")
     print("#**********************")
@@ -197,6 +197,7 @@ workflow calibrate {
     scikit_optimize_model
     main:
     ask(scikit_optimize_model)
+    create_systems(ask.out.points.flatten())
     emit:
     scikit_optimize_model = ask.out.scikit_optimize_model
     //points = ask.out.points

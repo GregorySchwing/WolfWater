@@ -79,6 +79,8 @@ log.info """\
         //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
         //path_to_database = Channel.fromPath( params.database_path )
         torch_model = train_model(csv_channel)
+        torch_model.view()
+        return
         skopt_model = initialize_scikit_optimize_model()
         calibrate.recurse(skopt_model).times(3)
     } else {
