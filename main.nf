@@ -3,13 +3,16 @@
 // Using DSL-2
 nextflow.enable.dsl=2
 
+// Using recursion
+nextflow.preview.recursion=true
+
 // All of the default parameters are being set in `nextflow.config`
 
 // Import sub-workflows
 include { build_solvents } from './modules/system_builder'
 include { train_model } from './modules/model_builder'
 include { initialize_scikit_optimize_model } from './modules/scikit_optimize'
-include { ask_skopt } from './modules/scikit_optimize'
+include { calibrate } from './modules/scikit_optimize'
 
 
 
@@ -77,7 +80,7 @@ log.info """\
         //path_to_database = Channel.fromPath( params.database_path )
         torch_model = train_model(csv_channel)
         skopt_model = initialize_scikit_optimize_model()
-        ask_skopt(skopt_model)
+        calibrate.recurse(skopt_model).times(3)
     } else {
         helpMessage()
     }
