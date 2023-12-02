@@ -8,6 +8,8 @@ nextflow.enable.dsl=2
 // Import sub-workflows
 include { build_solvents } from './modules/system_builder'
 include { train_model } from './modules/model_builder'
+include { initialize_scikit_optimize_model } from './modules/scikit_optimize'
+
 
 
 // Function which prints help message text
@@ -43,7 +45,13 @@ log.info """\
          output_folder          : ${params.output_folder}
          database_path          : ${params.database_path}
          path_to_xml            : ${params.path_to_xml}
-         num_points             : ${params.num_points}
+         batch_size             : ${params.batch_size}
+         density_lb             : ${params.density_lb}
+         density_ub             : ${params.density_ub}
+         alpha_lb               : ${params.alpha_lb}
+         alpha_ub               : ${params.alpha_ub}
+
+
          """
          .stripIndent()
 
@@ -67,6 +75,7 @@ log.info """\
         //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
         //path_to_database = Channel.fromPath( params.database_path )
         torch_model = train_model(csv_channel)
+        skopt_model = initialize_scikit_optimize_model()
     } else {
         helpMessage()
     }
