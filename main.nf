@@ -7,6 +7,7 @@ nextflow.enable.dsl=2
 
 // Import sub-workflows
 include { build_solvents } from './modules/system_builder'
+include { train_model } from './modules/model_builder'
 
 
 // Function which prints help message text
@@ -58,21 +59,14 @@ log.info """\
     }
 
     if ( params.database_path ){
-        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: params.num_points,quote:'"').map { 
-            row -> [row.T_K, row.Nmax, row.Ntrials, row.dens_vap, row.dens_uncertainty, row.dens_liq,\
-            row.dens_liq_uncertainty, row.psat, row.psat_uncertainty, row.lnzsat, row.lnzsat_uncertainty]
-        }
-        liquid_points = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: params.num_points,quote:'"').map { 
-            row -> [row.T_K, row.dens_liq, row.dens_liq_uncertainty]
-        }
-        vapor_points = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: params.num_points,quote:'"').map { 
-            row -> [row.T_K, row.dens_vap, row.dens_uncertainty]
-        }
-        //solventData.view()
-        liquid_points.view()
-        vapor_points.view()
-        path_to_xml = Channel.fromPath( params.path_to_xml )
-        build_solvents(liquid_points.combine(path_to_xml))
+        // Define the input CSV file
+        input_csv = file(params.database_path)
+
+        // Create a channel with the CSV file
+        csv_channel = channel.fromPath(input_csv)
+        //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
+        //path_to_database = Channel.fromPath( params.database_path )
+        torch_model = train_model(csv_channel)
     } else {
         helpMessage()
     }

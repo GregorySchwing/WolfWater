@@ -1,6 +1,11 @@
 name: mosdef_gomc
 channels:
   - conda-forge
+  - pytorch
 dependencies:
-  - python=3.10
   - mosdef-gomc
+  - pytorch
+  - scikit-learn
+  - matplotlib
+  - numpy
+  - pandas

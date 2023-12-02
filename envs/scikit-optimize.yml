@@ -1,0 +1,5 @@
+name: scikit-optimize
+channels:
+  - conda-forge
+dependencies:
+  - scikit-optimize
