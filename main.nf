@@ -9,6 +9,7 @@ nextflow.enable.dsl=2
 include { build_solvents } from './modules/system_builder'
 include { train_model } from './modules/model_builder'
 include { initialize_scikit_optimize_model } from './modules/scikit_optimize'
+include { ask_skopt } from './modules/scikit_optimize'
 
 
 
@@ -76,6 +77,7 @@ log.info """\
         //path_to_database = Channel.fromPath( params.database_path )
         torch_model = train_model(csv_channel)
         skopt_model = initialize_scikit_optimize_model()
+        ask_skopt(skopt_model)
     } else {
         helpMessage()
     }
