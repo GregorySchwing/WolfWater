@@ -54,6 +54,8 @@ log.info """\
          density_ub             : ${params.density_ub}
          alpha_lb               : ${params.alpha_lb}
          alpha_ub               : ${params.alpha_ub}
+         torch_model            : ${params.torch_model}
+         torch_scalers          : ${params.torch_scalers}
 
 
          """
@@ -76,11 +78,19 @@ log.info """\
 
         // Create a channel with the CSV file
         csv_channel = channel.fromPath(input_csv)
+
         //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
         //path_to_database = Channel.fromPath( params.database_path )
-        torch_model = train_model(csv_channel)
-        torch_model.view()
-        return
+        /**
+        train_model(csv_channel)
+        params.torch_model = train_model.out.torch_model
+        params.torch_scalers = train_model.out.torch_scalers
+        train_model.out.torch_model.view()
+        println("torch_model")
+        println("${params.torch_model}")
+        println("torch_scalers")
+        println("${params.torch_scalers}")
+        */
         skopt_model = initialize_scikit_optimize_model()
         calibrate.recurse(skopt_model).times(3)
     } else {

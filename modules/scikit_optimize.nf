@@ -196,6 +196,9 @@ workflow calibrate {
     take:
     scikit_optimize_model
     main:
+    input_csv = file(params.database_path)
+    // Create a channel with the CSV file
+    csv_channel = channel.fromPath(input_csv)
     ask(scikit_optimize_model)
     create_systems(ask.out.points.flatten())
     emit:

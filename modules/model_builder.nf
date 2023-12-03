@@ -11,7 +11,8 @@ process train_torch_model {
     input:
     file density_temperature_data
     output:
-    tuple path("trained_model.pth"), path("scalers.joblib"), emit: torch_model
+    path("trained_model.pth"), emit: torch_model
+    path("scalers.joblib"), emit: torch_scalers
     tuple path("predictions.png"), path("loss_epochs.png"), path("log.txt"), emit: model_performance
 
     script:
@@ -198,5 +199,7 @@ workflow train_model {
     train_torch_model(csv_channel)
     emit:
     torch_model = train_torch_model.out.torch_model
+    torch_scalers = train_torch_model.out.torch_scalers
+
     
 }
