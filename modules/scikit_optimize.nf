@@ -5,12 +5,13 @@ nextflow.enable.dsl=2
 
 process initialize_model {
     container "${params.container__scikit_optimize}"
-    publishDir "${params.output_folder}/scikit_optimize", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/scikit_optimize/${density}", mode: 'copy', overwrite: true
 
     debug true
     input:
+    tuple val(density), path(conf), path(pdb), path(psf), path(inp)
     output:
-    path("initial_scikit_optimize_model.pkl"), emit: scikit_optimize_model
+    tuple val(density), path(conf), path(pdb), path(psf), path(inp), path("initial_scikit_optimize_model.pkl"), emit: scikit_optimize_model
     path("log.txt")
     script:
     """
@@ -22,7 +23,7 @@ process initialize_model {
         import pickle
         import numpy as np
         np.int = np.int64
-        opt = Optimizer([(${params.alpha_lb},${params.alpha_ub}),(${params.density_lb},${params.density_ub})],
+        opt = Optimizer([(${params.alpha_lb},${params.alpha_ub})],
                     "GP", acq_func="EI",
                     acq_optimizer="sampling",
                     initial_point_generator="lhs",
@@ -32,7 +33,7 @@ process initialize_model {
         with open('initial_scikit_optimize_model.pkl', 'wb') as f:
             pickle.dump(opt, f)
         f.close()
-        print("Model initialized with domain=",[(${params.density_lb},${params.density_ub}),(${params.alpha_lb},${params.alpha_ub})])
+        print("Model initialized with domain=",[(${params.alpha_lb},${params.alpha_ub})])
         print("GP")
         print("acq_func=EI")
         print("acq_optimizer=sampling")
@@ -184,8 +185,9 @@ process create_systems {
 
 workflow initialize_scikit_optimize_model {
     take:
+    system
     main:
-    initialize_model()
+    initialize_model(system)
     emit:
     scikit_optimize_model = initialize_model.out.scikit_optimize_model
     

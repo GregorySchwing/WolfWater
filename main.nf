@@ -86,9 +86,8 @@ log.info """\
         solvent_xml_channel = channel.fromPath(solvent_xml)
         system_input = predicted_points.statepoints.combine(solvent_xml_channel)
         build_system(system_input)
-        return
-        skopt_model = initialize_scikit_optimize_model()
-        calibrate.recurse(skopt_model).times(3)
+        skopt_model = initialize_scikit_optimize_model(build_system.out.system)
+        //calibrate.recurse(skopt_model).times(3)
     } else {
         helpMessage()
     }
