@@ -5,17 +5,40 @@ nextflow.enable.dsl=2
 
 process build_solvent_system {
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temperature}_density_${density}", mode: 'copy', overwrite: true
+    //publishDir "${params.output_folder}/systems/temperature_${temperature}_density_${density}", mode: 'copy', overwrite: true
 
     debug true
     input:
-    tuple val(temperature), val(density), val(dens_uncertainty), path(path_to_xml)
+    tuple path(statepoint), path(path_to_xml)
     output:
-    tuple val(temperature), val(density), path("system.*"), emit: system
+    path("system.*"), emit: system
 
     script:
     """
     #!/usr/bin/env python
+
+    from typing import List
+    from pydantic import BaseModel
+
+    class Point(BaseModel):
+        density: float
+        temperature: float
+
+    # Function to load Pydantic objects from JSON file
+    def load_point_from_json(file_path: str) -> Point:
+        with open(file_path, 'r') as file:
+            json_data = file.read()
+            return Point.parse_raw(json_data)
+
+    loaded_point = load_point_from_json("${statepoint}")
+    print("Loaded point")
+    print(loaded_point)
+    print(loaded_point.density)
+    print(loaded_point.temperature)
+    density = loaded_point.density
+
+    temperature = loaded_point.temperature
+
     # GOMC Example for the NVT Ensemble using MoSDeF [1, 2, 5-10, 13-17]
 
     # Import the required packages and specify the force field (FF),
@@ -23,8 +46,10 @@ process build_solvent_system {
 
     import mbuild as mb
     import unyt as u
-    import mosdef_gomc.formats.gmso_charmm_writer as mf_charmm
-    import mosdef_gomc.formats.gmso_gomc_conf_writer as gomc_control
+    from mosdef_gomc.formats import charmm_writer as mf_charmm
+    from mosdef_gomc.formats.charmm_writer import Charmm
+    import mosdef_gomc.formats.gomc_conf_writer as gomc_control
+    
     from   mbuild.lib.molecules.water import WaterSPC
     import foyer
 
@@ -32,7 +57,7 @@ process build_solvent_system {
 
     liquid_box_length_Ang = 33
 
-    liquid_box_density_kg_per_m_cubed = ${density}
+    liquid_box_density_kg_per_m_cubed = density
 
     water = WaterSPC()
     water.name = 'SPCE'
@@ -75,13 +100,13 @@ process build_solvent_system {
     charmm.write_pdb()
 
     MC_steps=10000
-    gomc_control.write_gomc_control_file(charmm, conf_filename='in_NVT.conf',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float("${temperature}") * u.Kelvin, ExpertMode=True,\
+    gomc_control.write_gomc_control_file(charmm, conf_filename='in_NVT.conf',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         input_variables_dict={"ElectroStatic": True,
                                                             "Ewald": False,
                                                             "PRNG": int(0),
-                                                            "Rcut": 12 * u.angstrom,
-                                                            "RcutLow": 1 * u.angstrom,
-                                                            "RcutCoulomb_box_0": 12 * u.angstrom,
+                                                            "Rcut": 12,
+                                                            "RcutLow": 1,
+                                                            "RcutCoulomb_box_0": 12,
                                                             "VDWGeometricSigma" : False,
                                                             "CoordinatesFreq" : [False,1000],
                                                             "DCDFreq" : [False,100],
@@ -107,11 +132,11 @@ process build_solvent_system {
     """
 }
 
-workflow build_solvents {
+workflow build_system {
     take:
-    solv_temp_xml
+    statepoint_and_solvent_xml
     main:
-    build_solvent_system(solv_temp_xml)
+    build_solvent_system(statepoint_and_solvent_xml)
     
     emit:
     system = build_solvent_system.out.system
