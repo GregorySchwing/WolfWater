@@ -7,14 +7,12 @@ process train_torch_model {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/torch", mode: 'copy', overwrite: true
 
-    debug true
+    debug false
     input:
     file density_temperature_data
     output:
-    path("trained_model.pth"), emit: torch_model
-    path("scalers.joblib"), emit: torch_scalers
+    tuple path("trained_model.pth"), path("scalers.joblib"), emit: model_scalers_tuple
     tuple path("predictions.png"), path("loss_epochs.png"), path("log.txt"), emit: model_performance
-
     script:
     """
     #!/usr/bin/env python
@@ -192,14 +190,115 @@ process train_torch_model {
     """
 }
 
+
+process predict_torch_model {
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/density_statepoints/${density}", mode: 'copy', overwrite: true
+
+    debug false
+    input:
+    tuple path(torch_model), path(torch_scalers), val(density)
+    output:
+    path("statepoint.json"), emit: statepoint
+
+    script:
+    """
+    #!/usr/bin/env python
+    import torch
+    import numpy as np
+    from sklearn.preprocessing import StandardScaler
+    import joblib  # Import joblib for saving and loading scalers
+    def load_scalers(scaler_file="scalers.joblib"):
+        scaler_X, scaler_y = joblib.load(scaler_file)
+        print(f"Scalers loaded from {scaler_file}")
+        return scaler_X, scaler_y
+
+    class RegressionModel(torch.nn.Module):
+        def __init__(self, input_size):
+            super(RegressionModel, self).__init__()
+            self.fc1 = torch.nn.Linear(input_size, 256)
+            self.relu1 = torch.nn.ReLU()
+            self.dropout1 = torch.nn.Dropout(0.2)
+            self.fc2 = torch.nn.Linear(256, 128)
+            self.relu2 = torch.nn.ReLU()
+            self.dropout2 = torch.nn.Dropout(0.2)
+            self.fc3 = torch.nn.Linear(128, 64)
+            self.relu3 = torch.nn.ReLU()
+            self.dropout3 = torch.nn.Dropout(0.2)
+            self.fc4 = torch.nn.Linear(64, 1)
+
+        def forward(self, x):
+            x = self.fc1(x)
+            x = self.relu1(x)
+            x = self.dropout1(x)
+            x = self.fc2(x)
+            x = self.relu2(x)
+            x = self.dropout2(x)
+            x = self.fc3(x)
+            x = self.relu3(x)
+            x = self.dropout3(x)
+            x = self.fc4(x)
+            return x
+
+    def load_model(model_path, input_size=1):
+        model = RegressionModel(input_size)
+        model.load_state_dict(torch.load(model_path))
+        model.eval()
+        return model
+
+    def predict_temperature(model, density, scaler_X, scaler_y):
+        density_scaled = scaler_X.transform(np.array([[density]]).astype(np.float32))
+        density_tensor = torch.from_numpy(density_scaled)
+        
+        with torch.no_grad():
+            model.eval()
+            temperature_scaled = model(density_tensor)
+            temperature = scaler_y.inverse_transform(temperature_scaled.numpy())[0, 0]
+        
+        return temperature
+
+    # Example usage:
+    loaded_model = load_model("${torch_model}", input_size=1)
+    scaler_X, scaler_y = load_scalers("${torch_scalers}")
+    density_to_predict = ${density}  # Replace with the desired density
+    predicted_temperature = predict_temperature(loaded_model, density_to_predict, scaler_X, scaler_y)
+    print(f"Predicted Temperature for Density {density_to_predict}: {predicted_temperature:.2f} K")
+
+    from typing import List
+    from pydantic import BaseModel
+
+    class Point(BaseModel):
+        density: float
+        temperature: float
+
+    # Create a Pydantic object
+    point_obj = Point(density=${density}, temperature=predicted_temperature)
+
+    # Serialize the Pydantic object to JSON
+    with open("statepoint.json", 'w') as file:
+        file.write(point_obj.json())
+
+
+    """
+}
+
+
 workflow train_model {
     take:
     csv_channel
     main:
     train_torch_model(csv_channel)
     emit:
-    torch_model = train_torch_model.out.torch_model
-    torch_scalers = train_torch_model.out.torch_scalers
+    model_scalers_tuple = train_torch_model.out.model_scalers_tuple
+    
+}
 
+workflow predict_model {
+    take:
+    model_density_tuple
+    main:
+    predict_torch_model(model_density_tuple)
+    emit:
+    statepoints = predict_torch_model.out.statepoint
     
 }

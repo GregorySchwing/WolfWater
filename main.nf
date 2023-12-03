@@ -11,6 +11,7 @@ nextflow.preview.recursion=true
 // Import sub-workflows
 include { build_solvents } from './modules/system_builder'
 include { train_model } from './modules/model_builder'
+include { predict_model } from './modules/model_builder'
 include { initialize_scikit_optimize_model } from './modules/scikit_optimize'
 include { calibrate } from './modules/scikit_optimize'
 
@@ -75,22 +76,17 @@ log.info """\
     if ( params.database_path ){
         // Define the input CSV file
         input_csv = file(params.database_path)
-
+        densities = Channel.fromList( ['1', '10', '100', '200', '300', '400', '500', '600', '700', '800', '900', '1000'] )
         // Create a channel with the CSV file
         csv_channel = channel.fromPath(input_csv)
 
         //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
         //path_to_database = Channel.fromPath( params.database_path )
-        /**
         train_model(csv_channel)
-        params.torch_model = train_model.out.torch_model
-        params.torch_scalers = train_model.out.torch_scalers
-        train_model.out.torch_model.view()
-        println("torch_model")
-        println("${params.torch_model}")
-        println("torch_scalers")
-        println("${params.torch_scalers}")
-        */
+        model_density_tuple = train_model.out.model_scalers_tuple.combine(densities)
+        predicted_points = predict_model(model_density_tuple)
+        predicted_points.statepoints.view()
+        return
         skopt_model = initialize_scikit_optimize_model()
         calibrate.recurse(skopt_model).times(3)
     } else {
