@@ -82,8 +82,6 @@ log.info """\
         train_model(csv_channel)
         model_density_tuple = train_model.out.model_scalers_tuple.combine(densities)
         predicted_points = predict_model(model_density_tuple)
-        predicted_points.statepoints.view()
-
         solvent_xml = file(params.path_to_xml)
         solvent_xml_channel = channel.fromPath(solvent_xml)
         system_input = predicted_points.statepoints.combine(solvent_xml_channel)

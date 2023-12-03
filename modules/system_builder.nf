@@ -5,13 +5,13 @@ nextflow.enable.dsl=2
 
 process build_solvent_system {
     container "${params.container__mosdef_gomc}"
-    //publishDir "${params.output_folder}/systems/temperature_${temperature}_density_${density}", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${density}", mode: 'copy', overwrite: true
 
-    debug true
+    debug false
     input:
-    tuple path(statepoint), path(path_to_xml)
+    tuple val(density), path(statepoint), path(path_to_xml)
     output:
-    path("system.*"), emit: system
+    tuple val(density), path("system.conf"), path("system.pdb"), path("system.psf"), path("system.inp"), emit: system
 
     script:
     """
@@ -81,7 +81,7 @@ process build_solvent_system {
 
     charmm = mf_charmm.Charmm(water_box,
                             'system',
-                            ff_filename="NVT_water",
+                            ff_filename="system",
                             forcefield_selection=forcefield_file_water,
                             residues= residues_list,
                             gomc_fix_bonds_angles=fixed_bonds_angles_list
@@ -100,7 +100,7 @@ process build_solvent_system {
     charmm.write_pdb()
 
     MC_steps=10000
-    gomc_control.write_gomc_control_file(charmm, conf_filename='in_NVT.conf',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
+    gomc_control.write_gomc_control_file(charmm, conf_filename='system.conf',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         input_variables_dict={"ElectroStatic": True,
                                                             "Ewald": False,
                                                             "PRNG": int(0),

@@ -199,7 +199,7 @@ process predict_torch_model {
     input:
     tuple path(torch_model), path(torch_scalers), val(density)
     output:
-    path("statepoint.json"), emit: statepoint
+    tuple val(density), path("statepoint.json"), emit: statepoint
 
     script:
     """
