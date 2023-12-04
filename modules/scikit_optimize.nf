@@ -99,7 +99,7 @@ process ask_points {
 
 process run_gomc {
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/scikit_optimize/${density}/batch/${iteration}/run_gomc", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/scikit_optimize/${density}/batch/${iteration}/run_gomc/${json.baseName}", mode: 'copy', overwrite: true
 
     debug true
     input:
@@ -150,29 +150,7 @@ workflow calibrate {
     // Create a channel with the CSV file
     //csv_channel = channel.fromPath(input_csv)
     ask_points(scikit_optimize_model)
-    ask_points.out.systems.transpose().view()
-    /**
-    json_files = ask_points.out.systems.map { it[6] }
-    density = ask_points.out.systems.map { it[0] }.view{}
-    conf = ask_points.out.systems.map { it[1] }.view{}
-    pdb = ask_points.out.systems.map { it[2] }.view{}
-    psf = ask_points.out.systems.map { it[3] }.view{}
-    inp = ask_points.out.systems.map { it[4] }.view{}
-    iteration = ask_points.out.systems.map { it[5] }.view{}
-    systems = density.merge(conf, pdb, psf, inp, iteration) //.view()
-    systems.combine(json_files.flatten()).view()*/
-    return
-    // val(density), path(conf), path(pdb), path(psf), path(inp), path(scikit_optimize_model), val(iteration)
-
-    current_iteration = scikit_optimize_model.map { it[6] }.view{}
-    next_iteration = scikit_optimize_model.map { it[6]+1 }.view{}
-
-    systems = density.merge(conf, pdb, psf, inp, current_iteration) //.view()
-    
-    systems_to_run = systems.combine(ask_points.out.json.flatten())
-    systems_to_run.view()
-    run_gomc(systems_to_run)
-    scikit_optimize_model = density.merge(conf, pdb, psf, inp, ask_points.out.mdl, next_iteration) //.view()
+    run_gomc(ask_points.out.systems.transpose())
 
     //create_systems(ask.out.points.flatten())
     emit:
