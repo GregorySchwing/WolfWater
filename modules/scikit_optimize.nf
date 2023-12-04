@@ -105,7 +105,7 @@ process run_gomc {
     input:
     tuple val(density), path(conf), path(pdb), path(psf), path(inp), val(iteration), path(json)
     output:
-    tuple val(density), path("system.conf"), path(pdb), path(psf), path(inp), val(iteration), path(json)
+    tuple val(density), path("system_w_alpha.conf"), path(pdb), path(psf), path(inp), val(iteration), path(json)
 
     script:
     """
@@ -128,7 +128,7 @@ process run_gomc {
     print(loaded_point)
     # Specify the file paths
     input_file_path = "${conf}"  # Replace with your actual input file path
-    output_file_path = "system.conf"  # Replace with your desired output file path
+    output_file_path = "system_w_alpha.conf"  # Replace with your desired output file path
     print(input_file_path)
     print(output_file_path)
     # Open input file for reading and output file for writing
@@ -137,7 +137,9 @@ process run_gomc {
         for line in input_file:
             # Write each line to the output file
             output_file.write(line)
-        output_file.write("FUCK!")
+        print('WolfKind\tRAHBARI',file=output_file)
+        print('WolfPotential\tDSF',file=output_file)
+        print("WolfAlpha\t0\t{alpha}".format(alpha=loaded_point.alpha),file=output_file)
 
     """
 }
