@@ -53,7 +53,7 @@ process ask_points {
     input:
     tuple val(density), path(conf), path(pdb), path(psf), path(inp), path(scikit_optimize_model), val(iteration)
     output:
-    //tuple val(density), path(conf), path(pdb), path(psf), path(inp), path("current_scikit_optimize_model.pkl"), val(iteration), emit: scikit_optimize_model
+    tuple val(density), path(conf), path(pdb), path(psf), path(inp), val(iteration), path("*.json"), emit: systems
     path("current_scikit_optimize_model.pkl"), emit: mdl
     path("*.json"), emit: json
     script:
@@ -150,14 +150,20 @@ workflow calibrate {
     // Create a channel with the CSV file
     //csv_channel = channel.fromPath(input_csv)
     ask_points(scikit_optimize_model)
-    points_with_indices = ask_points.out.json.flatten().map { tuple( it, it.baseName ) }
+    ask_points.out.systems.transpose().view()
+    /**
+    json_files = ask_points.out.systems.map { it[6] }
+    density = ask_points.out.systems.map { it[0] }.view{}
+    conf = ask_points.out.systems.map { it[1] }.view{}
+    pdb = ask_points.out.systems.map { it[2] }.view{}
+    psf = ask_points.out.systems.map { it[3] }.view{}
+    inp = ask_points.out.systems.map { it[4] }.view{}
+    iteration = ask_points.out.systems.map { it[5] }.view{}
+    systems = density.merge(conf, pdb, psf, inp, iteration) //.view()
+    systems.combine(json_files.flatten()).view()*/
     return
     // val(density), path(conf), path(pdb), path(psf), path(inp), path(scikit_optimize_model), val(iteration)
-    density = scikit_optimize_model.map { it[0] }.view{}
-    conf = scikit_optimize_model.map { it[1] }.view{}
-    pdb = scikit_optimize_model.map { it[2] }.view{}
-    psf = scikit_optimize_model.map { it[3] }.view{}
-    inp = scikit_optimize_model.map { it[4] }.view{}
+
     current_iteration = scikit_optimize_model.map { it[6] }.view{}
     next_iteration = scikit_optimize_model.map { it[6]+1 }.view{}
 
