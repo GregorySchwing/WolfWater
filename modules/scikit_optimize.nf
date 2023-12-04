@@ -11,7 +11,7 @@ process initialize_model {
     input:
     tuple val(density), path(conf), path(pdb), path(psf), path(inp)
     output:
-    tuple val(density), path(conf), path(pdb), path(psf), path(inp), path("initial_scikit_optimize_model.pkl"), emit: scikit_optimize_model
+    tuple val(density), path(conf), path(pdb), path(psf), path(inp), path("initial_scikit_optimize_model.pkl"), val(0), emit: scikit_optimize_model
     path("log.txt")
     script:
     """
@@ -45,16 +45,15 @@ process initialize_model {
 }
 
 
-process ask {
+process ask_points {
     container "${params.container__scikit_optimize}"
-    publishDir "${params.output_folder}/scikit_optimize/batch/${task.index}/ask", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/scikit_optimize/${density}/batch/${iteration}/ask", mode: 'copy', overwrite: true
 
     debug true
     input:
-    path(scikit_optimize_model)
+    tuple val(density), path(conf), path(pdb), path(psf), path(inp), path(scikit_optimize_model), val(iteration)
     output:
-    path("current_scikit_optimize_model.pkl"), emit: scikit_optimize_model
-    path("*.json"), emit: points
+    tuple val(density), path(conf), path(pdb), path(psf), path(inp), path("current_scikit_optimize_model.pkl"), val(iteration), emit: scikit_optimize_model
     script:
     """
     #!/usr/bin/env python
@@ -65,7 +64,6 @@ process ask {
 
     class Point(BaseModel):
         alpha: float
-        density: float
 
     with open("log.txt", 'w') as sys.stdout:
         from skopt import Optimizer
@@ -83,7 +81,7 @@ process ask {
 
         for count, value in enumerate(pointsList):
             # Create a Pydantic object
-            point_obj = Point(alpha=value[0], density=value[1])
+            point_obj = Point(alpha=value[0])
 
             # Serialize the Pydantic object to JSON
             with open(f"{count}.json", 'w') as file:
@@ -201,10 +199,10 @@ workflow calibrate {
     //input_csv = file(params.database_path)
     // Create a channel with the CSV file
     //csv_channel = channel.fromPath(input_csv)
-    //ask(scikit_optimize_model)
+    ask_points(scikit_optimize_model)
     //create_systems(ask.out.points.flatten())
     emit:
-    scikit_optimize_model
+    scikit_optimize_model = ask_points.out.scikit_optimize_model
     //points = ask.out.points
 
 }
@@ -214,16 +212,7 @@ workflow calibrate_wrapper {
     take:
     scikit_optimize_model
     main:
-    calibrate(scikit_optimize_model) |
-    calibrate |
-    calibrate |
-    calibrate |
-    calibrate |
-    calibrate |
-    calibrate |
-    calibrate |
-    calibrate |
-    calibrate
+    calibrate(scikit_optimize_model)
     //calibrate.recurse(f).times(3)
     //emit:
     //points = ask.out.points
