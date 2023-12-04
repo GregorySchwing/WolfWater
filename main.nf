@@ -13,7 +13,7 @@ include { build_system } from './modules/system_builder'
 include { train_model } from './modules/model_builder'
 include { predict_model } from './modules/model_builder'
 include { initialize_scikit_optimize_model } from './modules/scikit_optimize'
-include { calibrate } from './modules/scikit_optimize'
+include { calibrate_wrapper } from './modules/scikit_optimize'
 
 
 // Function which prints help message text
@@ -87,7 +87,7 @@ log.info """\
         system_input = predicted_points.statepoints.combine(solvent_xml_channel)
         build_system(system_input)
         skopt_model = initialize_scikit_optimize_model(build_system.out.system)
-        //calibrate.recurse(skopt_model).times(3)
+        calibrate_wrapper(skopt_model)
     } else {
         helpMessage()
     }

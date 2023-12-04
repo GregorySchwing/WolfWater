@@ -198,13 +198,34 @@ workflow calibrate {
     take:
     scikit_optimize_model
     main:
-    input_csv = file(params.database_path)
+    //input_csv = file(params.database_path)
     // Create a channel with the CSV file
-    csv_channel = channel.fromPath(input_csv)
-    ask(scikit_optimize_model)
-    create_systems(ask.out.points.flatten())
+    //csv_channel = channel.fromPath(input_csv)
+    //ask(scikit_optimize_model)
+    //create_systems(ask.out.points.flatten())
     emit:
-    scikit_optimize_model = ask.out.scikit_optimize_model
+    scikit_optimize_model
+    //points = ask.out.points
+
+}
+
+
+workflow calibrate_wrapper {
+    take:
+    scikit_optimize_model
+    main:
+    calibrate(scikit_optimize_model) |
+    calibrate |
+    calibrate |
+    calibrate |
+    calibrate |
+    calibrate |
+    calibrate |
+    calibrate |
+    calibrate |
+    calibrate
+    //calibrate.recurse(f).times(3)
+    //emit:
     //points = ask.out.points
 
 }
