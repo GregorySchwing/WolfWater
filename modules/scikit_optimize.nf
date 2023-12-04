@@ -162,6 +162,7 @@ workflow calibrate {
     // Create a channel with the CSV file
     //csv_channel = channel.fromPath(input_csv)
     ask_points(scikit_optimize_model)
+    ask_points.out.systems.transpose().view()
     run_gomc(ask_points.out.systems.transpose())
 
     //create_systems(ask.out.points.flatten())
