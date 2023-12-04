@@ -105,7 +105,7 @@ process run_gomc {
     input:
     tuple val(density), path(conf), path(pdb), path(psf), path(inp), val(iteration), path(json)
     output:
-    tuple val(density), path(conf), path(pdb), path(psf), path(inp), val(iteration), path(json)
+    tuple val(density), path("system.conf"), path(pdb), path(psf), path(inp), val(iteration), path(json)
 
     script:
     """
@@ -126,6 +126,18 @@ process run_gomc {
     loaded_point = load_point_from_json("${json}")
     print("Loaded point")
     print(loaded_point)
+    # Specify the file paths
+    input_file_path = "${conf}"  # Replace with your actual input file path
+    output_file_path = "system.conf"  # Replace with your desired output file path
+    print(input_file_path)
+    print(output_file_path)
+    # Open input file for reading and output file for writing
+    with open(input_file_path, 'r') as input_file, open(output_file_path, 'w') as output_file:
+        # Read the input file line by line
+        for line in input_file:
+            # Write each line to the output file
+            output_file.write(line)
+        output_file.write("FUCK!")
 
     """
 }
