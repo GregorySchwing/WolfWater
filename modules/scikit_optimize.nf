@@ -150,6 +150,8 @@ workflow calibrate {
     // Create a channel with the CSV file
     //csv_channel = channel.fromPath(input_csv)
     ask_points(scikit_optimize_model)
+    points_with_indices = ask_points.out.json.flatten().map { tuple( it, it.baseName ) }
+    return
     // val(density), path(conf), path(pdb), path(psf), path(inp), path(scikit_optimize_model), val(iteration)
     density = scikit_optimize_model.map { it[0] }.view{}
     conf = scikit_optimize_model.map { it[1] }.view{}
@@ -160,7 +162,9 @@ workflow calibrate {
     next_iteration = scikit_optimize_model.map { it[6]+1 }.view{}
 
     systems = density.merge(conf, pdb, psf, inp, current_iteration) //.view()
+    
     systems_to_run = systems.combine(ask_points.out.json.flatten())
+    systems_to_run.view()
     run_gomc(systems_to_run)
     scikit_optimize_model = density.merge(conf, pdb, psf, inp, ask_points.out.mdl, next_iteration) //.view()
 
