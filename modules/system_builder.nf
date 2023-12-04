@@ -100,7 +100,7 @@ process build_solvent_system {
     charmm.write_pdb()
 
     MC_steps=10000
-    gomc_control.write_gomc_control_file(charmm, conf_filename='system.conf',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
+    gomc_control.write_gomc_control_file(charmm, conf_filename='system',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         input_variables_dict={"ElectroStatic": True,
                                                             "Ewald": False,
                                                             "PRNG": int(0),
