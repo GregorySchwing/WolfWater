@@ -49,11 +49,13 @@ process ask_points {
     container "${params.container__scikit_optimize}"
     publishDir "${params.output_folder}/scikit_optimize/${density}/batch/${iteration}/ask", mode: 'copy', overwrite: true
 
-    debug true
+    debug false
     input:
     tuple val(density), path(conf), path(pdb), path(psf), path(inp), path(scikit_optimize_model), val(iteration)
     output:
-    tuple val(density), path(conf), path(pdb), path(psf), path(inp), path("current_scikit_optimize_model.pkl"), val(iteration), emit: scikit_optimize_model
+    //tuple val(density), path(conf), path(pdb), path(psf), path(inp), path("current_scikit_optimize_model.pkl"), val(iteration), emit: scikit_optimize_model
+    path("current_scikit_optimize_model.pkl"), emit: mdl
+    path("*.json"), emit: json
     script:
     """
     #!/usr/bin/env python
@@ -101,7 +103,7 @@ process create_systems {
 
     debug true
     input:
-    path(json)
+    tuple val(density), path(conf), path(pdb), path(psf), path(inp), val(iteration), path(json)
     output:
 
     script:
@@ -113,7 +115,6 @@ process create_systems {
 
     class Point(BaseModel):
         alpha: float
-        density: float
 
     # Function to load Pydantic objects from JSON file
     def load_point_from_json(file_path: str) -> Point:
@@ -124,59 +125,7 @@ process create_systems {
     loaded_point = load_point_from_json("${json}")
     print("Loaded point")
     print(loaded_point)
-    quit()
-    print("#**********************")
-    print("Started: GOMC Charmm Object")
-    print("#**********************")
 
-    total_molecules_liquid = 500
-    box_0_box_size_ang = 25
-
-    forcefield_files = '../../SPCE_GMSO.xml'
-    molecule_A = mb.load('../../SPCE.mol2')
-    molecule_A.name = 'WAT'
-
-    molecule_type_list = [molecule_A]
-    mol_fraction_molecule_A = 1.0
-    molecule_mol_fraction_list = [mol_fraction_molecule_A]
-    fixed_bonds_angles_list = [molecule_A.name]
-    residues_list = [molecule_A.name]
-
-    #bead_to_atom_name_dict = {'_CH3': 'C', '_CH2': 'C', '_CH': 'C', '_HC': 'C'}
-
-    print('total_molecules_liquid = ' + str(total_molecules_liquid))
-
-    print('Running: liquid phase box packing')
-    box_liq = mb.fill_box(compound=molecule_type_list,
-                          n_compounds=total_molecules_liquid,
-                          box=[box_0_box_size_ang/10, box_0_box_size_ang/10, box_0_box_size_ang/10]
-                          )
-    # this uses the UFF force field, not the user force field.  Causes trouble in simulations of rigid molecules
-    #box_liq.energy_minimize(forcefield=forcefield_files,
-    #                        steps=10 ** 5
-    #                        )
-    print('Completed: liquid phase box packing')
-
-    print('molecule_mol_fraction_list =  ' + str(molecule_mol_fraction_list))
-
-    print('Running: GOMC FF file, and the psf and pdb files')
-    gomc_charmm = mf_charmm.Charmm(
-        box_liq,
-        mosdef_structure_box_0_name_str,
-        ff_filename=gomc_ff_filename_str,
-        forcefield_selection=forcefield_files,
-        residues=residues_list,
-        gomc_fix_bonds_angles=fixed_bonds_angles_list,
-    )
-
-    if write_files == True:
-        gomc_charmm.write_inp()
-
-        gomc_charmm.write_psf()
-
-        gomc_charmm.write_pdb()
-
-    print('Completed: Writing  GOMC FF file, and the psf and pdb files')
     """
 }
 
@@ -200,9 +149,26 @@ workflow calibrate {
     // Create a channel with the CSV file
     //csv_channel = channel.fromPath(input_csv)
     ask_points(scikit_optimize_model)
+    // val(density), path(conf), path(pdb), path(psf), path(inp), path(scikit_optimize_model), val(iteration)
+    density = scikit_optimize_model.map { it[0] }.view{}
+    conf = scikit_optimize_model.map { it[1] }.view{}
+    pdb = scikit_optimize_model.map { it[2] }.view{}
+    psf = scikit_optimize_model.map { it[3] }.view{}
+    inp = scikit_optimize_model.map { it[4] }.view{}
+    current_iteration = scikit_optimize_model.map { it[6] }.view{}
+    next_iteration = scikit_optimize_model.map { it[6]+1 }.view{}
+
+    systems = density.merge(conf, pdb, psf, inp, current_iteration) //.view()
+    systems_to_run = systems.combine(ask_points.out.json.flatten())
+    systems_to_run.view()
+
+
+    scikit_optimize_model = density.merge(conf, pdb, psf, inp, ask_points.out.mdl, next_iteration) //.view()
+
     //create_systems(ask.out.points.flatten())
     emit:
-    scikit_optimize_model = ask_points.out.scikit_optimize_model
+    scikit_optimize_model
+    //scikit_optimize_model = ask_points.out.scikit_optimize_model
     //points = ask.out.points
 
 }
@@ -213,6 +179,7 @@ workflow calibrate_wrapper {
     scikit_optimize_model
     main:
     calibrate(scikit_optimize_model)
+    //calibrate.out.scikit_optimize_model.view()
     //calibrate.recurse(f).times(3)
     //emit:
     //points = ask.out.points
