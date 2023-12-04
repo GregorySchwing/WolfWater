@@ -74,7 +74,9 @@ log.info """\
     if ( params.database_path ){
         // Define the input CSV file
         input_csv = file(params.database_path)
-        densities = Channel.fromList( ['1', '10', '100', '200', '300', '400', '500', '600', '700', '800', '900', '1000'] )
+        //densities = Channel.fromList( ['1', '10', '100', '200', '300', '400', '500', '600', '700', '800', '900', '1000'] )
+        densities = Channel.fromList( ['1', '10'] )
+
         // Create a channel with the CSV file
         csv_channel = channel.fromPath(input_csv)
         //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))

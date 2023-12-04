@@ -97,14 +97,15 @@ process ask_points {
 }
 
 
-process create_systems {
+process run_gomc {
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/scikit_optimize/batch/${task.index}/systems", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/scikit_optimize/${density}/batch/${iteration}/run_gomc", mode: 'copy', overwrite: true
 
     debug true
     input:
     tuple val(density), path(conf), path(pdb), path(psf), path(inp), val(iteration), path(json)
     output:
+    tuple val(density), path(conf), path(pdb), path(psf), path(inp), val(iteration), path(json)
 
     script:
     """
@@ -160,9 +161,7 @@ workflow calibrate {
 
     systems = density.merge(conf, pdb, psf, inp, current_iteration) //.view()
     systems_to_run = systems.combine(ask_points.out.json.flatten())
-    systems_to_run.view()
-
-
+    run_gomc(systems_to_run)
     scikit_optimize_model = density.merge(conf, pdb, psf, inp, ask_points.out.mdl, next_iteration) //.view()
 
     //create_systems(ask.out.points.flatten())
