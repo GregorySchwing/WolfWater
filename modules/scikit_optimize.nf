@@ -9,9 +9,9 @@ process initialize_model {
 
     debug true
     input:
-    tuple val(density), path(conf), path(pdb), path(psf), path(inp)
+    tuple val(density), path(statepoint), path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp)
     output:
-    tuple val(density), path(conf), path(pdb), path(psf), path(inp), path("initial_scikit_optimize_model.pkl"), val(0), emit: scikit_optimize_model
+    tuple val(density), path(statepoint), path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp), path("initial_scikit_optimize_model.pkl"), val(0), emit: scikit_optimize_model
     path("log.txt")
     script:
     """
@@ -51,9 +51,9 @@ process ask_points {
 
     debug false
     input:
-    tuple val(density), path(conf), path(pdb), path(psf), path(inp), path(scikit_optimize_model), val(iteration)
+    tuple val(density), path(statepoint), path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp), path(scikit_optimize_model), val(iteration)
     output:
-    tuple val(density), path(conf), path(pdb), path(psf), path(inp), val(iteration), path("*.json"), emit: systems
+    tuple val(density), path(statepoint), path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp), val(iteration), path("*.json"), emit: systems
     path("current_scikit_optimize_model.pkl"), emit: mdl
     path("*.json"), emit: json
     script:
@@ -103,9 +103,9 @@ process run_gomc {
 
     debug true
     input:
-    tuple val(density), path(conf), path(pdb), path(psf), path(inp), val(iteration), path(json)
+    tuple val(density), path(statepoint), path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp), val(iteration), path(json)
     output:
-    tuple val(density), path("system_w_alpha.conf"), path(pdb), path(psf), path(inp), val(iteration), path(json)
+    tuple val(density), path(statepoint), path("system_w_alpha.conf"), path(pdb), path(psf), path(inp), val(iteration), path(json)
 
     script:
     """
