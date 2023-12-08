@@ -297,7 +297,7 @@ process build_solvent_system {
                                         )
 
     file1 = open("system_npt.conf", "a")
-    defAlphaLine = "{box}\t{val}\t{file}\n".format(box="Checkpoint", val="True",file="system_nvt_restart.chk")
+    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="system_nvt_restart.chk")
     file1.writelines(defAlphaLine)
 
     """
@@ -307,7 +307,7 @@ process build_solvent_system {
 process equilibrate_solvent_system {
     //container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_eq", mode: 'copy', overwrite: true
-
+    cpus 8
     debug false
     input:
     tuple val(Rho_kg_per_m_cubed), path(statepoint),path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp)
@@ -319,7 +319,7 @@ process equilibrate_solvent_system {
     """
     #!/bin/bash
     cat ${nvt_conf} > local.conf
-    ~/GOMC/bin/GOMC_CPU_NVT +p16 local.conf
+    ~/GOMC/bin/GOMC_CPU_NVT +p${task.cpus} local.conf
     """
 }
 
