@@ -296,8 +296,9 @@ process build_solvent_system {
                                                                 }
                                         )
 
-
-
+    file1 = open("system_npt.conf", "a")
+    defAlphaLine = "{box}\t{val}\t{file}\n".format(box="Checkpoint", val="True",file="system_nvt_restart.chk")
+    file1.writelines(defAlphaLine)
 
     """
 }
