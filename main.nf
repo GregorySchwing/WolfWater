@@ -92,6 +92,7 @@ log.info """\
         system_input = solventData.combine(solvent_xml_channel)
         system_input.view()
         build_system(system_input)
+        return
         skopt_model = initialize_scikit_optimize_model(build_system.out.system)
         skopt_model.view()
         calibrate_wrapper(skopt_model)

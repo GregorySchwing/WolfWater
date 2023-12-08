@@ -99,7 +99,9 @@ process build_solvent_system_from_torch {
 
     charmm.write_pdb()
 
-    MC_steps=10000
+    #MC_steps=10000
+    MC_steps=1500
+
     gomc_control.write_gomc_control_file(charmm, conf_filename='system',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         input_variables_dict={"ElectroStatic": True,
                                                             "Ewald": False,
@@ -229,11 +231,12 @@ process build_solvent_system {
 
     charmm.write_pdb()
 
-    MC_steps=10000
+    #MC_steps=10000
+    MC_steps=1500
 
     gomc_control.write_gomc_control_file(charmm, conf_filename='system_nvt',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         input_variables_dict={"ElectroStatic": True,
-                                                            "Ewald": False,
+                                                            "Ewald": True,
                                                             "EqSteps" : 1000,
                                                             "AdjSteps":10,
                                                             "Pressure" : float(pressure), 
@@ -300,12 +303,33 @@ process build_solvent_system {
 }
 
 
+process equilibrate_solvent_system {
+    //container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_eq", mode: 'copy', overwrite: true
+
+    debug false
+    input:
+    tuple val(Rho_kg_per_m_cubed), path(statepoint),path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp)
+    output:
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
+    path("system_nvt_restart.chk"),path("system_nvt_BOX_0_restart.coor"), path("system_nvt_BOX_0_restart.xsc")
+
+    shell:
+    """
+    #!/bin/bash
+    cat ${nvt_conf} > local.conf
+    ~/GOMC/bin/GOMC_CPU_NVT +p16 local.conf
+    """
+}
+
+
 workflow build_system {
     take:
     statepoint_and_solvent_xml
     main:
-    build_solvent_system(statepoint_and_solvent_xml)
-    
+    build_solvent_system(statepoint_and_solvent_xml) |
+    equilibrate_solvent_system
+
     emit:
     system = build_solvent_system.out.system
     
