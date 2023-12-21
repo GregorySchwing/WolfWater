@@ -401,7 +401,7 @@ process NAMD_NVT_equilibration_solvent_system {
     tuple val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
     tuple path(namd_minimization_conf), path(namd_nvt_conf), path(namd_npt_conf)
     output:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: system
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path("nvt_equil.restart.xsc"), path("nvt_equil.restart.coor"), emit: system
     tuple path("nvt_equil.restart.xsc"), path("nvt_equil.restart.coor"), emit: restart_files
     tuple path("minimization.log"), path("nvt_equil.log"), emit: record
     shell:
