@@ -96,7 +96,6 @@ log.info """\
         jinja_channel = Channel.fromPath( [file(params.path_to_minimization_template),\
         file(params.path_to_nvt_template), file(params.path_to_npt_template)] ).collect()
         system_input = solventData.combine(solvent_xml_channel)        
-        jinja_channel.view()
         build_system(system_input,jinja_channel)
         return
         skopt_model = initialize_scikit_optimize_model(build_system.out.system)

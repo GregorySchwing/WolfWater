@@ -329,9 +329,9 @@ process write_namd_confs {
     minsteps=10000
     nvt_eq_steps=50000
     npt_eq_steps=100000
-    minsteps=1000
-    nvt_eq_steps=1000
-    npt_eq_steps=1000
+    #minsteps=1000
+    #nvt_eq_steps=1000
+    #npt_eq_steps=1000
     coords["waterModel"]="TIP3"
     coords["temp"]=loaded_point.temperature
     coords["outputname"]="minimization"
@@ -391,15 +391,40 @@ process NAMD_equilibration_solvent_system {
     """
 }
 
-process NPT_equilibration_from_namd_solvent_system {
-    container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_npt_eq", mode: 'copy', overwrite: true
+
+process NAMD_NVT_equilibration_solvent_system {
+    container "${params.container__namd}"
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_namd_eq", mode: 'copy', overwrite: true
     cpus 8
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp), path(restart_xsc), path(restart_coor)
+    tuple val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
+    tuple path(namd_minimization_conf), path(namd_nvt_conf), path(namd_npt_conf)
     output:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: system
+    tuple path("nvt_equil.restart.xsc"), path("nvt_equil.restart.coor"), emit: restart_files
+    tuple path("minimization.log"), path("nvt_equil.log"), emit: record
+    shell:
+    """
+    
+    #!/bin/bash
+    cat ${namd_minimization_conf} > local.conf
+    namd2 +p${task.cpus} local.conf > minimization.log
+    cat ${namd_nvt_conf} > local.conf
+    namd2 +p${task.cpus} local.conf > nvt_equil.log
+    """
+}
+
+
+process NPT_equilibration_from_namd_solvent_system {
+    container "${params.container__gomc}"
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_gomc_eq", mode: 'copy', overwrite: true
+    cpus 8
+    debug false
+    input:
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path(npt_conf), path(restart_xsc), path(restart_coor)
+    output:
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path(npt_conf),\
     path("system_npt_restart.chk"),path("system_npt_BOX_0_restart.coor"), path("system_npt_BOX_0_restart.xsc"), emit: system
     tuple path("NPT_equilibration.log"), path(npt_conf),  emit: record
 
@@ -615,9 +640,9 @@ workflow build_system {
     main:
     build_solvent_system(statepoint_and_solvent_xml)
     write_namd_confs(build_solvent_system.out.system,jinja_channel)
-    NAMD_equilibration_solvent_system(build_solvent_system.out.system, write_namd_confs.out.namd)
-    write_gomc_confs(build_solvent_system.out.charmm,NAMD_equilibration_solvent_system.out.restart_files)
-    //NPT_equilibration_from_namd_solvent_system(NAMD_equilibration_solvent_system.out.system)
+    NAMD_NVT_equilibration_solvent_system(build_solvent_system.out.system, write_namd_confs.out.namd)
+    write_gomc_confs(build_solvent_system.out.charmm,NAMD_NVT_equilibration_solvent_system.out.restart_files)
+    NPT_equilibration_from_namd_solvent_system(write_gomc_confs.out.system)
 
 
     emit:
