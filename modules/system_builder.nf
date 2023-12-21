@@ -392,7 +392,7 @@ process NAMD_equilibration_solvent_system {
 }
 
 
-process NAMD_NVT_equilibration_solvent_system {
+process NAMD_NVT_equilibration {
     container "${params.container__namd}"
     publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_namd_eq", mode: 'copy', overwrite: true
     cpus 8
@@ -416,7 +416,7 @@ process NAMD_NVT_equilibration_solvent_system {
 }
 
 
-process NPT_equilibration_from_namd_solvent_system {
+process GOMC_NPT_equilibration {
     container "${params.container__gomc}"
     publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_gomc_eq", mode: 'copy', overwrite: true
     cpus 8
@@ -424,10 +424,10 @@ process NPT_equilibration_from_namd_solvent_system {
     input:
     tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path(npt_conf), path(restart_xsc), path(restart_coor)
     output:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path(npt_conf),\
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp),\
     path("system_npt_restart.chk"),path("system_npt_BOX_0_restart.coor"), path("system_npt_BOX_0_restart.xsc"), emit: system
+    tuple path("system_npt_BOX_0_restart.xsc"), path("system_npt_BOX_0_restart.coor"), path("system_npt_restart.chk"), emit: restart_files
     tuple path("NPT_equilibration.log"), path(npt_conf),  emit: record
-
     shell:
     """
     
@@ -632,6 +632,122 @@ process NPT_equilibration_solvent_system {
     """
 }
 
+process write_gomc_calibration_confs {
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_ewald_calibration", mode: 'copy', overwrite: true
+
+    debug false
+    input:
+    tuple val(Rho_kg_per_m_cubed), path(json), path(charmm)
+    tuple path(restart_xsc), path(restart_coor), path(restart_chk)
+    output:
+    tuple val(Rho_kg_per_m_cubed),path("statepoint.json"),path("system.pdb"), path("system.psf"), path("system.inp"), path("system_npt.conf"), path(restart_xsc), path(restart_coor), path(restart_chk), emit: system
+    script:
+    """
+    #!/usr/bin/env python
+    import pickle
+    from typing import List
+    from pydantic import BaseModel
+
+    class Point(BaseModel):
+        density: float
+        temperature: float
+        pressure: float
+        no_mol: float
+        box_length: float
+
+    # Function to load Pydantic objects from JSON file
+    def load_point_from_json(file_path: str) -> Point:
+        with open(file_path, 'r') as file:
+            json_data = file.read()
+            return Point.model_validate_json(json_data)
+
+    loaded_point = load_point_from_json("${json}")
+
+    # GOMC Example for the NVT Ensemble using MoSDeF [1, 2, 5-10, 13-17]
+
+    # Import the required packages and specify the force field (FF),
+    # box dimensions, density, and mol ratios [1, 2, 5-10, 13-17].
+
+    import mbuild as mb
+    import unyt as u
+    from mosdef_gomc.formats import charmm_writer as mf_charmm
+    from mosdef_gomc.formats.charmm_writer import Charmm
+    import mosdef_gomc.formats.gomc_conf_writer as gomc_control
+    
+    from   mbuild.lib.molecules.water import WaterSPC
+    import foyer
+
+    liquid_box_length_Ang = loaded_point.box_length
+
+    liquid_box_density_kg_per_m_cubed =loaded_point.density
+
+    temperature = loaded_point.temperature
+    
+    pressure=loaded_point.pressure
+
+
+    # Build the Charmm object, which is required to write the
+    # FF (.inp), psf, pdb, and GOMC control files [1, 2, 5-10, 13-17]
+
+    # Unpickling the object
+    with open("${charmm}", 'rb') as file:
+        charmm = pickle.load(file)
+
+    ### Note:  The electrostatics and Ewald are turned off in the
+    # GOMC control file (i.e., False) since the n-alkanes beads in the
+    # trappe-ua force field have no charge (i.e., the bead charges are all zero)
+    charmm.write_inp()
+
+    charmm.write_psf()
+
+    charmm.write_pdb()
+
+    #MC_steps=10000
+    MC_steps=1500
+
+    restart_coor = "${restart_coor}"
+    restart_xsc = "${restart_xsc}"
+    gomc_control.write_gomc_control_file(charmm, conf_filename='system_npt',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
+                                        check_input_files_exist=False, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
+                                        Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
+                                        extendedSystem_box_0=restart_xsc,
+                                        input_variables_dict={"ElectroStatic": True,
+                                                            "Ewald": False,
+                                                            "EqSteps" : 1000,
+                                                            "AdjSteps":10,
+                                                            "Pressure" : float(pressure), 
+                                                            "PRNG": int(0),
+                                                            "Rcut": 12,
+                                                            "RcutLow": 1,
+                                                            "RcutCoulomb_box_0": 12,
+                                                            "VDWGeometricSigma" : False,
+                                                            "CoordinatesFreq" : [False,1000],
+                                                            "DCDFreq" : [False,100],
+                                                            "RestartFreq":[True,MC_steps],
+                                                            "CheckpointFreq":[True,MC_steps],
+                                                            "ConsoleFreq":[True,1],
+                                                            "BlockAverageFreq":[True,MC_steps],
+                                                            "HistogramFreq":[False,1000],
+                                                            "DisFreq":0.0,
+                                                            "RotFreq":0.0,
+                                                            "IntraSwapFreq":0.0,
+                                                            "RegrowthFreq":0.0,
+                                                            "CrankShaftFreq":0.0,
+                                                            "VolFreq":0.01,
+                                                            "MultiParticleFreq":0.99,
+                                                            "OutputName":"system_npt"
+
+                                                                }
+                                        )
+
+    file1 = open("system_npt.conf", "a")
+    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="${restart_chk}")
+    file1.writelines(defAlphaLine)
+
+    """
+}
+
 
 workflow build_system {
     take:
@@ -640,9 +756,10 @@ workflow build_system {
     main:
     build_solvent_system(statepoint_and_solvent_xml)
     write_namd_confs(build_solvent_system.out.system,jinja_channel)
-    NAMD_NVT_equilibration_solvent_system(build_solvent_system.out.system, write_namd_confs.out.namd)
-    write_gomc_confs(build_solvent_system.out.charmm,NAMD_NVT_equilibration_solvent_system.out.restart_files)
-    NPT_equilibration_from_namd_solvent_system(write_gomc_confs.out.system)
+    NAMD_NVT_equilibration(build_solvent_system.out.system, write_namd_confs.out.namd)
+    write_gomc_confs(build_solvent_system.out.charmm,NAMD_NVT_equilibration.out.restart_files)
+    GOMC_NPT_equilibration(write_gomc_confs.out.system)
+    write_gomc_calibration_confs(build_solvent_system.out.charmm,GOMC_NPT_equilibration.out.restart_files)
 
 
     emit:
