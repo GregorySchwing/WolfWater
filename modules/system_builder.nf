@@ -144,7 +144,7 @@ process build_solvent_system {
     tuple val(temp_K), val(P_bar), val(No_mol), val(Rho_kg_per_m_cubed), val(L_m_if_cubed), path(path_to_xml)
     output:
     tuple val(Rho_kg_per_m_cubed),path("statepoint.json"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp"), emit: system
-
+    tuple val(Rho_kg_per_m_cubed), path("statepoint.json"), path("charmm.pkl"), emit: charmm
     script:
     """
     #!/usr/bin/env python
@@ -238,6 +238,11 @@ process build_solvent_system {
     charmm.write_psf()
 
     charmm.write_pdb()
+
+    import pickle
+    # Pickling the object
+    with open('charmm.pkl', 'wb') as file:
+        pickle.dump(charmm, file)
 
     """
 }
@@ -371,7 +376,7 @@ process NAMD_equilibration_solvent_system {
     tuple path(namd_minimization_conf), path(namd_nvt_conf), path(namd_npt_conf)
     output:
     tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: system
-    tuple path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: out
+    tuple path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: restart_files
     tuple path("minimization.log"), path("nvt_equil.log"), path("npt_equil.log"),  emit: record
     shell:
     """
@@ -432,18 +437,19 @@ process NVT_equilibration_solvent_system {
 
 process build_solvent_system_gomc {
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_gomc_eq", mode: 'copy', overwrite: true
 
     debug false
     input:
-    tuple val(temp_K), val(P_bar), val(No_mol), val(Rho_kg_per_m_cubed), val(L_m_if_cubed), path(path_to_xml)
+    tuple val(Rho_kg_per_m_cubed), path(json), path(charmm)
+    tuple path(restart_xsc), path(restart_coor)
     output:
-    tuple val(Rho_kg_per_m_cubed),path("statepoint.json"),path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp"), emit: system
+    tuple val(Rho_kg_per_m_cubed),path("statepoint.json"),path("system.pdb"), path("system.psf"), path("system.inp"), path("system_npt.conf"), path(restart_xsc), path(restart_coor), emit: system
 
     script:
     """
     #!/usr/bin/env python
-
+    import pickle
     from typing import List
     from pydantic import BaseModel
 
@@ -454,12 +460,13 @@ process build_solvent_system_gomc {
         no_mol: float
         box_length: float
 
-    # Create a Pydantic object
-    point_obj = Point(density=${Rho_kg_per_m_cubed}, temperature=${temp_K}, pressure=${P_bar},no_mol=${No_mol},box_length=${L_m_if_cubed})
+    # Function to load Pydantic objects from JSON file
+    def load_point_from_json(file_path: str) -> Point:
+        with open(file_path, 'r') as file:
+            json_data = file.read()
+            return Point.model_validate_json(json_data)
 
-    # Serialize the Pydantic object to JSON
-    with open("statepoint.json", 'w') as file:
-        file.write(point_obj.model_dump_json())
+    loaded_point = load_point_from_json("${json}")
 
     # GOMC Example for the NVT Ensemble using MoSDeF [1, 2, 5-10, 13-17]
 
@@ -475,55 +482,21 @@ process build_solvent_system_gomc {
     from   mbuild.lib.molecules.water import WaterSPC
     import foyer
 
-    forcefield_file_water = "${path_to_xml}"
+    liquid_box_length_Ang = loaded_point.box_length
 
-    liquid_box_length_Ang = ${L_m_if_cubed}
+    liquid_box_density_kg_per_m_cubed =loaded_point.density
 
-    liquid_box_density_kg_per_m_cubed = ${Rho_kg_per_m_cubed}
-
-    temperature = ${temp_K}
+    temperature = loaded_point.temperature
     
-    pressure=${P_bar}
+    pressure=loaded_point.pressure
 
-    water = WaterSPC()
-    water.name = 'SPCE'
 
-    molecule_list = [water]
-    residues_list = [water.name]
-    fixed_bonds_angles_list = [water.name]
-
-    ## Build the main liquid simulation box (box 0) for the simulation [1, 2, 13-17]
-
-    water_box = mb.fill_box(compound=molecule_list,
-                                        #density=${Rho_kg_per_m_cubed},
-                                        n_compounds=int(${No_mol}),
-                                        box=[liquid_box_length_Ang / 10,
-                                            liquid_box_length_Ang / 10,
-                                            liquid_box_length_Ang / 10]
-                                        )
-    # Destroys water angles!!! Since GOMC is rigid water, dont use this.
-    #water_box.energy_minimize(forcefield=forcefield_file_water , steps=10**5 )
     # Build the Charmm object, which is required to write the
     # FF (.inp), psf, pdb, and GOMC control files [1, 2, 5-10, 13-17]
 
-    charmm = mf_charmm.Charmm(water_box,
-                            'system',
-                            ff_filename="system",
-                            forcefield_selection=forcefield_file_water,
-                            residues= residues_list,
-                            gomc_fix_bonds_angles=fixed_bonds_angles_list
-                            )
-
-    namd_charmm = mf_charmm.Charmm(water_box,
-                            'namd_system',
-                            ff_filename="namd_system",
-                            forcefield_selection=forcefield_file_water,
-                            residues= residues_list,
-                            gomc_fix_bonds_angles=None
-                            )
-
-    ## Write the write the FF (.inp), psf, pdb, and GOMC control files [1, 2, 5-10, 13-17]
-    namd_charmm.write_inp()
+    # Unpickling the object
+    with open("${charmm}", 'rb') as file:
+        charmm = pickle.load(file)
 
     ### Note:  The electrostatics and Ewald are turned off in the
     # GOMC control file (i.e., False) since the n-alkanes beads in the
@@ -567,8 +540,8 @@ process build_solvent_system_gomc {
                                         )
     restart_coor = "system_nvt_BOX_0_restart.coor"
     restart_xsc = "system_nvt_BOX_0_restart.xsc"
-    restart_coor = "npt_equil.restart.coor"
-    restart_xsc = "npt_equil.restart.xsc"
+    restart_coor = "${restart_coor}"
+    restart_xsc = "${restart_xsc}"
     gomc_control.write_gomc_control_file(charmm, conf_filename='system_npt',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
                                         check_input_files_exist=False, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
@@ -643,6 +616,7 @@ workflow build_system {
     build_solvent_system(statepoint_and_solvent_xml)
     build_solvent_system_namd(build_solvent_system.out.system,jinja_channel)
     NAMD_equilibration_solvent_system(build_solvent_system.out.system, build_solvent_system_namd.out.namd)
+    build_solvent_system_gomc(build_solvent_system.out.charmm,NAMD_equilibration_solvent_system.out.restart_files)
     //NPT_equilibration_from_namd_solvent_system(NAMD_equilibration_solvent_system.out.system)
 
 
