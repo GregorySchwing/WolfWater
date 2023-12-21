@@ -248,7 +248,7 @@ process build_solvent_system {
 }
 
 
-process build_solvent_system_namd {
+process write_namd_confs {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}", mode: 'copy', overwrite: true
 
@@ -435,7 +435,7 @@ process NVT_equilibration_solvent_system {
 }
 
 
-process build_solvent_system_gomc {
+process write_gomc_confs {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_gomc_eq", mode: 'copy', overwrite: true
 
@@ -614,9 +614,9 @@ workflow build_system {
     jinja_channel
     main:
     build_solvent_system(statepoint_and_solvent_xml)
-    build_solvent_system_namd(build_solvent_system.out.system,jinja_channel)
-    NAMD_equilibration_solvent_system(build_solvent_system.out.system, build_solvent_system_namd.out.namd)
-    build_solvent_system_gomc(build_solvent_system.out.charmm,NAMD_equilibration_solvent_system.out.restart_files)
+    write_namd_confs(build_solvent_system.out.system,jinja_channel)
+    NAMD_equilibration_solvent_system(build_solvent_system.out.system, write_namd_confs.out.namd)
+    write_gomc_confs(build_solvent_system.out.charmm,NAMD_equilibration_solvent_system.out.restart_files)
     //NPT_equilibration_from_namd_solvent_system(NAMD_equilibration_solvent_system.out.system)
 
 
