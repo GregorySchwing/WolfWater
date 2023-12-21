@@ -143,7 +143,7 @@ process build_solvent_system {
     input:
     tuple val(temp_K), val(P_bar), val(No_mol), val(Rho_kg_per_m_cubed), val(L_m_if_cubed), path(path_to_xml)
     output:
-    tuple val(Rho_kg_per_m_cubed), path("statepoint.json"),path("system_nvt.conf"), path("system_npt.conf"), path("system.pdb"), path("system.psf"), path("system.inp"), emit: system
+    tuple val(Rho_kg_per_m_cubed),path("statepoint.json"),path("system_nvt.conf"), path("system_npt.conf"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp"), emit: system
 
     script:
     """
@@ -219,8 +219,16 @@ process build_solvent_system {
                             gomc_fix_bonds_angles=fixed_bonds_angles_list
                             )
 
+    namd_charmm = mf_charmm.Charmm(water_box,
+                            'namd_system',
+                            ff_filename="namd_system",
+                            forcefield_selection=forcefield_file_water,
+                            residues= residues_list,
+                            gomc_fix_bonds_angles=None
+                            )
 
     ## Write the write the FF (.inp), psf, pdb, and GOMC control files [1, 2, 5-10, 13-17]
+    namd_charmm.write_inp()
 
     ### Note:  The electrostatics and Ewald are turned off in the
     # GOMC control file (i.e., False) since the n-alkanes beads in the
@@ -300,9 +308,149 @@ process build_solvent_system {
     #defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="system_nvt_restart.chk")
     #file1.writelines(defAlphaLine)
 
+
+
+
     """
 }
 
+
+process build_solvent_system_namd {
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}", mode: 'copy', overwrite: true
+
+    debug false
+    input:
+    tuple val(Rho_kg_per_m_cubed), path("statepoint.json"),path("system_nvt.conf"), path("system_npt.conf"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp")
+    tuple path(path_to_minimization_template), path(path_to_nvt_template), path(path_to_npt_template)
+    output:
+    //tuple val(Rho_kg_per_m_cubed), path("statepoint.json"),path("system_nvt.conf"), path("system_npt.conf"), path("system.pdb"), path("system.psf"), path("system.inp"), emit: system
+    tuple path("namd_min.conf"), path("namd_nvt.conf"), path("namd_npt.conf"), emit: namd
+
+    script:
+    """
+    #!/usr/bin/env python
+
+    import os
+    def _setup_conf(fname, template, data, overwrite=False):
+
+        #Create conf files based on a template and provided data.
+
+        #Parameters
+        #----------
+        #fname: str
+        #    Name of the file to be saved out
+        #template: str, or jinja2.Template
+        #    Either a jinja2.Template or path to a jinja template
+        #data: dict
+        #    Dictionary storing data matched with the fields available in the template
+        #overwrite: bool, optional, default=False
+        #    Options to overwrite (or not) existing mdp file of the
+
+        #Returns
+        #-------
+        #File saved with names defined by fname
+        
+
+        from jinja2 import Template
+
+        if isinstance(template, str):
+            with open(template, "r") as f:
+                template = Template(f.read())
+
+        if not overwrite:
+            if os.path.isfile(fname):
+                raise FileExistsError(
+                    f"{fname} already exists. Set overwrite=True to write out."
+                )
+
+        rendered = template.render(data)
+        with open(fname, "w") as f:
+            f.write(rendered)
+
+        return None
+
+    from typing import List
+    from pydantic import BaseModel
+
+    class Point(BaseModel):
+        density: float
+        temperature: float
+        pressure: float
+        no_mol: float
+        box_length: float
+
+    # Function to load Pydantic objects from JSON file
+    def load_point_from_json(file_path: str) -> Point:
+        with open(file_path, 'r') as file:
+            json_data = file.read()
+            return Point.model_validate_json(json_data)
+
+    loaded_point = load_point_from_json("statepoint.json")
+    print("Loaded point")
+    print(loaded_point)
+
+
+    coords = {}
+
+
+    coords["waterModel"]="TIP3"
+    coords["temp"]=loaded_point.temperature
+    coords["outputname"]="minimization"
+    coords["minimize_steps"]=10000
+
+    coords["structure"]="system.psf"
+    coords["coordinates"]="system.pdb"
+
+    coords["gomcwaterparameters"]="system.inp"
+    coords["namdwaterparameters"]="namd_system.inp"
+
+    coords["X_DIM_BOX"]=loaded_point.box_length
+    coords["Y_DIM_BOX"]=loaded_point.box_length
+    coords["Z_DIM_BOX"]=loaded_point.box_length
+    coords["alpha"]=90
+    coords["beta"]=90
+    coords["gamma"]=90
+    coords["X_ORIGIN_BOX"]=loaded_point.box_length/2
+    coords["Y_ORIGIN_BOX"]=loaded_point.box_length/2
+    coords["Z_ORIGIN_BOX"]=loaded_point.box_length/2
+    _setup_conf("namd_min.conf", "$path_to_minimization_template", coords, overwrite=False)
+    coords["eq_steps"]=50000
+    coords["bincoordinates"]="min.restart.coor"
+    coords["outputname"]="nvt_eq"
+    _setup_conf("namd_nvt.conf", "$path_to_nvt_template", coords, overwrite=False)
+    coords["eq_steps"]=100000
+    coords["bincoordinates"]="nvt_equil.restart.coor"
+    coords["pressure"]=loaded_point.pressure
+    coords["outputname"]="npt_eq"
+    _setup_conf("namd_npt.conf", "$path_to_npt_template", coords, overwrite=False)
+    """
+}
+
+
+process NAMD_equilibration_solvent_system {
+    container "${params.container__namd}"
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_namd_eq", mode: 'copy', overwrite: true
+    cpus 8
+    debug false
+    input:
+    tuple val(Rho_kg_per_m_cubed), path(statepoint),path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp), path(namd_inp)
+    tuple path(minimization_conf), path(nvt_conf), path(npt_conf)
+    output:
+    tuple path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: system
+    tuple path("minimization.log"), path("nvt_equil.log"), path("npt_equil.log"),  emit: record
+    shell:
+    """
+    
+    #!/bin/bash
+    cat ${minimization_conf} > local.conf
+    namd2 +p${task.cpus} local.conf > minimization.log
+    cat ${nvt_conf} > local.conf
+    namd2 +p${task.cpus} local.conf > nvt_equil.log
+    cat ${npt_conf} > local.conf
+    namd2 +p${task.cpus} local.conf > npt_equil.log
+    """
+}
 
 process NVT_equilibration_solvent_system {
     container "${params.container__gomc}"
@@ -350,10 +498,13 @@ process NPT_equilibration_solvent_system {
 workflow build_system {
     take:
     statepoint_and_solvent_xml
+    jinja_channel
     main:
-    build_solvent_system(statepoint_and_solvent_xml) |
-    NVT_equilibration_solvent_system 
-    NPT_equilibration_solvent_system(NVT_equilibration_solvent_system.out.system)
+    build_solvent_system(statepoint_and_solvent_xml)
+    build_solvent_system_namd(build_solvent_system.out.system,jinja_channel)
+    NAMD_equilibration_solvent_system(build_solvent_system.out.system, build_solvent_system_namd.out.namd)
+    //NVT_equilibration_solvent_system 
+    //NPT_equilibration_solvent_system(NVT_equilibration_solvent_system.out.system)
 
     emit:
     system = build_solvent_system.out.system

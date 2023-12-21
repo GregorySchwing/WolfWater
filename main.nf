@@ -88,10 +88,16 @@ log.info """\
         //model_density_tuple = train_model.out.model_scalers_tuple.combine(densities)
         //predicted_points = predict_model(model_density_tuple)
         solvent_xml = file(params.path_to_xml)
-        solvent_xml_channel = channel.fromPath(solvent_xml)
-        system_input = solventData.combine(solvent_xml_channel)
-        system_input.view()
-        build_system(system_input)
+        min_jinja_template = file(params.path_to_minimization_template)
+        nvt_jinja_template = file(params.path_to_nvt_template)
+        npt_jinja_template = file(params.path_to_npt_template)
+
+        solvent_xml_channel = Channel.fromPath( solvent_xml )
+        jinja_channel = Channel.fromPath( [file(params.path_to_minimization_template),\
+        file(params.path_to_nvt_template), file(params.path_to_npt_template)] ).collect()
+        system_input = solventData.combine(solvent_xml_channel)        
+        jinja_channel.view()
+        build_system(system_input,jinja_channel)
         return
         skopt_model = initialize_scikit_optimize_model(build_system.out.system)
         skopt_model.view()
