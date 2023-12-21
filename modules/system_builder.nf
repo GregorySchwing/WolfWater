@@ -270,11 +270,14 @@ process build_solvent_system {
 
                                                                 }
                                         )
-
+    restart_coor = "system_nvt_BOX_0_restart.coor"
+    restart_xsc = "system_nvt_BOX_0_restart.xsc"
+    restart_coor = "npt_equil.restart.coor"
+    restart_xsc = "npt_equil.restart.xsc"
     gomc_control.write_gomc_control_file(charmm, conf_filename='system_npt',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
                                         check_input_files_exist=False, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
-                                        Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0="system_nvt_BOX_0_restart.coor",
-                                        extendedSystem_box_0="system_nvt_BOX_0_restart.xsc",
+                                        Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
+                                        extendedSystem_box_0=restart_xsc,
                                         input_variables_dict={"ElectroStatic": True,
                                                             "Ewald": False,
                                                             "EqSteps" : 1000,
@@ -435,19 +438,20 @@ process NAMD_equilibration_solvent_system {
     debug false
     input:
     tuple val(Rho_kg_per_m_cubed), path(statepoint),path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp), path(namd_inp)
-    tuple path(minimization_conf), path(nvt_conf), path(npt_conf)
+    tuple path(namd_minimization_conf), path(namd_nvt_conf), path(namd_npt_conf)
     output:
-    tuple path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: system
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp), path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: system
+    tuple path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: out
     tuple path("minimization.log"), path("nvt_equil.log"), path("npt_equil.log"),  emit: record
     shell:
     """
     
     #!/bin/bash
-    cat ${minimization_conf} > local.conf
+    cat ${namd_minimization_conf} > local.conf
     namd2 +p${task.cpus} local.conf > minimization.log
-    cat ${nvt_conf} > local.conf
+    cat ${namd_nvt_conf} > local.conf
     namd2 +p${task.cpus} local.conf > nvt_equil.log
-    cat ${npt_conf} > local.conf
+    cat ${namd_npt_conf} > local.conf
     namd2 +p${task.cpus} local.conf > npt_equil.log
     """
 }
@@ -495,6 +499,27 @@ process NPT_equilibration_solvent_system {
     """
 }
 
+process NPT_equilibration_from_namd_solvent_system {
+    container "${params.container__gomc}"
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_npt_eq", mode: 'copy', overwrite: true
+    cpus 8
+    debug false
+    input:
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp), path(restart_xsc), path(restart_coor)
+    output:
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
+    path("system_npt_restart.chk"),path("system_npt_BOX_0_restart.coor"), path("system_npt_BOX_0_restart.xsc"), emit: system
+    tuple path("NPT_equilibration.log"), path(npt_conf),  emit: record
+
+    shell:
+    """
+    
+    #!/bin/bash
+    cat ${npt_conf} > local.conf
+    GOMC_CPU_NPT +p${task.cpus} local.conf > NPT_equilibration.log
+    """
+}
+
 workflow build_system {
     take:
     statepoint_and_solvent_xml
@@ -503,6 +528,7 @@ workflow build_system {
     build_solvent_system(statepoint_and_solvent_xml)
     build_solvent_system_namd(build_solvent_system.out.system,jinja_channel)
     NAMD_equilibration_solvent_system(build_solvent_system.out.system, build_solvent_system_namd.out.namd)
+    NPT_equilibration_from_namd_solvent_system(NAMD_equilibration_solvent_system.out.system)
     //NVT_equilibration_solvent_system 
     //NPT_equilibration_solvent_system(NVT_equilibration_solvent_system.out.system)
 
