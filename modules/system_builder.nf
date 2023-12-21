@@ -296,40 +296,64 @@ process build_solvent_system {
                                                                 }
                                         )
 
-    file1 = open("system_npt.conf", "a")
-    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="system_nvt_restart.chk")
-    file1.writelines(defAlphaLine)
+    #file1 = open("system_npt.conf", "a")
+    #defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="system_nvt_restart.chk")
+    #file1.writelines(defAlphaLine)
 
     """
 }
 
 
-process equilibrate_solvent_system {
-    //container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_eq", mode: 'copy', overwrite: true
+process NVT_equilibration_solvent_system {
+    container "${params.container__gomc}"
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_nvt_eq", mode: 'copy', overwrite: true
     cpus 8
     debug false
     input:
     tuple val(Rho_kg_per_m_cubed), path(statepoint),path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp)
     output:
     tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
-    path("system_nvt_restart.chk"),path("system_nvt_BOX_0_restart.coor"), path("system_nvt_BOX_0_restart.xsc")
+    path("system_nvt_restart.chk"),path("system_nvt_BOX_0_restart.coor"), path("system_nvt_BOX_0_restart.xsc"), emit: system
+    tuple path("NVT_equilibration.log"), path(nvt_conf),  emit: record
 
     shell:
     """
+    
     #!/bin/bash
     cat ${nvt_conf} > local.conf
-    ~/GOMC/bin/GOMC_CPU_NVT +p${task.cpus} local.conf
+    GOMC_CPU_NVT +p${task.cpus} local.conf > NVT_equilibration.log
     """
 }
 
+process NPT_equilibration_solvent_system {
+    container "${params.container__gomc}"
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_npt_eq", mode: 'copy', overwrite: true
+    cpus 8
+    debug false
+    input:
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
+    path("system_nvt_restart.chk"),path("system_nvt_BOX_0_restart.coor"), path("system_nvt_BOX_0_restart.xsc")
+    output:
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
+    path("system_npt_restart.chk"),path("system_npt_BOX_0_restart.coor"), path("system_npt_BOX_0_restart.xsc"), emit: system
+    tuple path("NPT_equilibration.log"), path(npt_conf),  emit: record
+
+    shell:
+    """
+    
+    #!/bin/bash
+    cat ${npt_conf} > local.conf
+    GOMC_CPU_NPT +p${task.cpus} local.conf > NPT_equilibration.log
+    """
+}
 
 workflow build_system {
     take:
     statepoint_and_solvent_xml
     main:
     build_solvent_system(statepoint_and_solvent_xml) |
-    equilibrate_solvent_system
+    NVT_equilibration_solvent_system 
+    NPT_equilibration_solvent_system(NVT_equilibration_solvent_system.out.system)
 
     emit:
     system = build_solvent_system.out.system

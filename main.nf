@@ -4,7 +4,7 @@
 nextflow.enable.dsl=2
 
 // Using recursion
-nextflow.preview.recursion=true
+// nextflow.preview.recursion=true
 
 // All of the default parameters are being set in `nextflow.config`
 
