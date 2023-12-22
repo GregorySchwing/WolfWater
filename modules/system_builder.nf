@@ -4,8 +4,10 @@
 nextflow.enable.dsl=2
 
 process build_solvent_system_from_torch {
+    cache 'lenient'
+    fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${density}", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${density}", mode: 'copy', overwrite: false
 
     debug false
     input:
@@ -136,15 +138,20 @@ process build_solvent_system_from_torch {
 
 
 process build_solvent_system {
+    cache 'lenient'
+    fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: false
 
     debug false
     input:
-    tuple val(temp_K), val(P_bar), val(No_mol), val(Rho_kg_per_m_cubed), val(L_m_if_cubed), path(path_to_xml)
+    tuple val(temp_K), val(P_bar), val(No_mol), val(Rho_kg_per_m_cubed), val(L_m_if_cubed), val(RcutCoulomb), path(path_to_xml)
     output:
     tuple val(Rho_kg_per_m_cubed),path("statepoint.json"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp"), emit: system
-    tuple val(Rho_kg_per_m_cubed), path("statepoint.json"), path("charmm.pkl"), emit: charmm
+    tuple val(Rho_kg_per_m_cubed), path("statepoint.json"), emit: statepoint
+    path("system_npt.conf"), emit: npt_conf
+    path("ewald_calibration.conf"), emit: ewald_calibration_conf
+    
     script:
     """
     #!/usr/bin/env python
@@ -158,9 +165,10 @@ process build_solvent_system {
         pressure: float
         no_mol: float
         box_length: float
+        rcut_couloumb: float
 
     # Create a Pydantic object
-    point_obj = Point(density=${Rho_kg_per_m_cubed}, temperature=${temp_K}, pressure=${P_bar},no_mol=${No_mol},box_length=${L_m_if_cubed})
+    point_obj = Point(density=${Rho_kg_per_m_cubed}, temperature=${temp_K}, pressure=${P_bar},no_mol=${No_mol},box_length=${L_m_if_cubed},rcut_couloumb=${RcutCoulomb})
 
     # Serialize the Pydantic object to JSON
     with open("statepoint.json", 'w') as file:
@@ -239,18 +247,103 @@ process build_solvent_system {
 
     charmm.write_pdb()
 
-    import pickle
-    # Pickling the object
-    with open('charmm.pkl', 'wb') as file:
-        pickle.dump(charmm, file)
+    MC_steps=1500
+    restart_coor = "nvt_equil.restart.coor"
+    restart_xsc = "nvt_equil.restart.xsc"
+    gomc_control.write_gomc_control_file(charmm, conf_filename='system_npt',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
+                                        check_input_files_exist=False, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
+                                        Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
+                                        extendedSystem_box_0=restart_xsc,
+                                        input_variables_dict={"ElectroStatic": True,
+                                                            "Ewald": True,
+                                                            "EqSteps" : 1000,
+                                                            "AdjSteps":10,
+                                                            "Pressure" : float(pressure), 
+                                                            "PRNG": int(0),
+                                                            "Rcut": 12,
+                                                            "RcutLow": 1,
+                                                            "RcutCoulomb_box_0": 12,
+                                                            "VDWGeometricSigma" : False,
+                                                            "CoordinatesFreq" : [False,1000],
+                                                            "DCDFreq" : [False,100],
+                                                            "RestartFreq":[True,MC_steps],
+                                                            "CheckpointFreq":[True,MC_steps],
+                                                            "ConsoleFreq":[True,1],
+                                                            "BlockAverageFreq":[True,MC_steps],
+                                                            "HistogramFreq":[False,1000],
+                                                            "DisFreq":0.98,
+                                                            "RotFreq":0.0,
+                                                            "IntraSwapFreq":0.0,
+                                                            "RegrowthFreq":0.0,
+                                                            "CrankShaftFreq":0.0,
+                                                            "VolFreq":0.01,
+                                                            "MultiParticleFreq":0.01,
+                                                            "OutputName":"system_npt"
+
+                                                                }
+                                        )
+
+
+    MC_steps=1500
+
+    restart_coor = "system_npt_BOX_0_restart.coor"
+    restart_xsc = "system_npt_BOX_0_restart.xsc"
+    restart_chk = "system_npt_restart.chk"
+    gomc_control.write_gomc_control_file(charmm, conf_filename='ewald_calibration',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
+                                        check_input_files_exist=False, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
+                                        Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
+                                        extendedSystem_box_0=restart_xsc,
+                                        input_variables_dict={"ElectroStatic": True,
+                                                            "Ewald": True,
+                                                            "EqSteps" : 1000,
+                                                            "AdjSteps":10,
+                                                            "Pressure" : float(pressure), 
+                                                            "PRNG": int(0),
+                                                            "Rcut": 12,
+                                                            "RcutLow": 1,
+                                                            "RcutCoulomb_box_0": 12,
+                                                            "VDWGeometricSigma" : False,
+                                                            "CoordinatesFreq" : [False,1000],
+                                                            "DCDFreq" : [False,100],
+                                                            "RestartFreq":[True,MC_steps],
+                                                            "CheckpointFreq":[True,MC_steps],
+                                                            "ConsoleFreq":[True,1],
+                                                            "BlockAverageFreq":[True,MC_steps],
+                                                            "HistogramFreq":[False,1000],
+                                                            "DisFreq":0.98,
+                                                            "RotFreq":0.0,
+                                                            "IntraSwapFreq":0.0,
+                                                            "RegrowthFreq":0.0,
+                                                            "CrankShaftFreq":0.0,
+                                                            "VolFreq":0.01,
+                                                            "MultiParticleFreq":0.01,
+                                                            "OutputName":"ewald_calibration"
+
+                                                                }
+                                        )
+
+    file1 = open("ewald_calibration.conf", "a")
+    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file=restart_chk)
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start="0.0",\
+    end="0.1",delta="0.1")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfCutoffCoulombRange", box="0",start="14",\
+    end="15",delta="0.5")
+    file1.writelines(defAlphaLine)
+
 
     """
 }
 
 
 process write_namd_confs {
+    cache 'lenient'
+    fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_input", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_input", mode: 'copy', overwrite: false
 
     debug false
     input:
@@ -312,6 +405,7 @@ process write_namd_confs {
         pressure: float
         no_mol: float
         box_length: float
+        rcut_couloumb: float
 
     # Function to load Pydantic objects from JSON file
     def load_point_from_json(file_path: str) -> Point:
@@ -329,9 +423,9 @@ process write_namd_confs {
     minsteps=10000
     nvt_eq_steps=50000
     npt_eq_steps=100000
-    #minsteps=1000
-    #nvt_eq_steps=1000
-    #npt_eq_steps=1000
+    minsteps=1000
+    nvt_eq_steps=1000
+    npt_eq_steps=1000
     coords["waterModel"]="TIP3"
     coords["temp"]=loaded_point.temperature
     coords["outputname"]="minimization"
@@ -367,8 +461,10 @@ process write_namd_confs {
 
 
 process NAMD_equilibration_solvent_system {
+    cache 'lenient'
+    fair true
     container "${params.container__namd}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_npt_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_npt_eq", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
@@ -393,15 +489,16 @@ process NAMD_equilibration_solvent_system {
 
 
 process NAMD_NVT_equilibration {
+    cache 'lenient'
+    fair true
     container "${params.container__namd}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_nvt_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_nvt_eq", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
     tuple val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
     tuple path(namd_minimization_conf), path(namd_nvt_conf), path(namd_npt_conf)
     output:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path("nvt_equil.restart.xsc"), path("nvt_equil.restart.coor"), emit: system
     tuple path("nvt_equil.restart.xsc"), path("nvt_equil.restart.coor"), emit: restart_files
     tuple path("minimization.log"), path("nvt_equil.log"), emit: record
     shell:
@@ -417,15 +514,17 @@ process NAMD_NVT_equilibration {
 
 
 process GOMC_NPT_equilibration {
+    cache 'lenient'
+    fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path(npt_conf), path(restart_xsc), path(restart_coor)
+    tuple val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
+    path(npt_conf)
+    tuple path(restart_xsc), path(restart_coor)
     output:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp),\
-    path("system_npt_restart.chk"),path("system_npt_BOX_0_restart.coor"), path("system_npt_BOX_0_restart.xsc"), emit: system
     tuple path("system_npt_BOX_0_restart.xsc"), path("system_npt_BOX_0_restart.coor"), path("system_npt_restart.chk"), emit: restart_files
     tuple path("NPT_equilibration.log"), path(npt_conf),  emit: record
     shell:
@@ -439,8 +538,10 @@ process GOMC_NPT_equilibration {
 
 
 process NVT_equilibration_solvent_system {
+    cache 'lenient'
+    fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_nvt_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_nvt_eq", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
@@ -461,20 +562,21 @@ process NVT_equilibration_solvent_system {
 
 
 process write_gomc_confs {
+    cache 'lenient'
+    fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq_input", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq_input", mode: 'copy', overwrite: false
 
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(json), path(charmm)
+    tuple val(Rho_kg_per_m_cubed), path(json)
     tuple path(restart_xsc), path(restart_coor)
     output:
-    tuple val(Rho_kg_per_m_cubed),path("statepoint.json"),path("system.pdb"), path("system.psf"), path("system.inp"), path("system_npt.conf"), path(restart_xsc), path(restart_coor), emit: system
+    path("system_npt.conf"), emit: npt_conf
 
     script:
     """
     #!/usr/bin/env python
-    import pickle
     from typing import List
     from pydantic import BaseModel
 
@@ -484,6 +586,7 @@ process write_gomc_confs {
         pressure: float
         no_mol: float
         box_length: float
+        rcut_couloumb: float
 
     # Function to load Pydantic objects from JSON file
     def load_point_from_json(file_path: str) -> Point:
@@ -588,13 +691,13 @@ process write_gomc_confs {
                                                             "ConsoleFreq":[True,1],
                                                             "BlockAverageFreq":[True,MC_steps],
                                                             "HistogramFreq":[False,1000],
-                                                            "DisFreq":0.0,
+                                                            "DisFreq":0.98,
                                                             "RotFreq":0.0,
                                                             "IntraSwapFreq":0.0,
                                                             "RegrowthFreq":0.0,
                                                             "CrankShaftFreq":0.0,
                                                             "VolFreq":0.01,
-                                                            "MultiParticleFreq":0.99,
+                                                            "MultiParticleFreq":0.01,
                                                             "OutputName":"system_npt"
 
                                                                 }
@@ -611,8 +714,10 @@ process write_gomc_confs {
 }
 
 process NPT_equilibration_solvent_system {
+    cache 'lenient'
+    fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
@@ -633,19 +738,20 @@ process NPT_equilibration_solvent_system {
 }
 
 process write_gomc_calibration_confs {
+    cache 'lenient'
+    fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_input", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_input", mode: 'copy', overwrite: false
 
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(json), path(charmm)
+    tuple val(Rho_kg_per_m_cubed), path(json)
     tuple path(restart_xsc), path(restart_coor), path(restart_chk)
     output:
     tuple val(Rho_kg_per_m_cubed),path("statepoint.json"),path("system.pdb"), path("system.psf"), path("system.inp"), path("ewald_calibration.conf"), path(restart_xsc), path(restart_coor), path(restart_chk), emit: system
     script:
     """
     #!/usr/bin/env python
-    import pickle
     from typing import List
     from pydantic import BaseModel
 
@@ -655,6 +761,7 @@ process write_gomc_calibration_confs {
         pressure: float
         no_mol: float
         box_length: float
+        rcut_couloumb: float
 
     # Function to load Pydantic objects from JSON file
     def load_point_from_json(file_path: str) -> Point:
@@ -747,9 +854,9 @@ process write_gomc_calibration_confs {
     defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
     file1.writelines(defAlphaLine)
     defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start="0.0",\
-    end="0.5",delta="0.1")
+    end="0.1",delta="0.1")
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfCutoffCoulombRange", box="0",start="10",\
+    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfCutoffCoulombRange", box="0",start="14",\
     end="15",delta="0.5")
     file1.writelines(defAlphaLine)
 
@@ -758,31 +865,37 @@ process write_gomc_calibration_confs {
 
 
 process GOMC_Ewald_Calibration {
+    cache 'lenient'
+    fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path(npt_conf), path(restart_xsc), path(restart_coor), path(restart_chk)
+    tuple val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
+    path(ewald_calibration_conf)
+    tuple path(restart_xsc), path(restart_coor), path(restart_chk)
     output:
     path("Wolf_Calibration_*"), emit: grids
-    tuple path("Ewald_Calibration.log"), path(npt_conf),  emit: record
+    path("Ewald_Calibration.log"),  emit: record
     shell:
     """
     
     #!/bin/bash
-    cat ${npt_conf} > local.conf
+    cat ${ewald_calibration_conf} > local.conf
     GOMC_CPU_NPT +p${task.cpus} local.conf > Ewald_Calibration.log
     """
 }
 
 process plot_grids {
+    cache 'lenient'
+    fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_plots", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_plots", mode: 'copy', overwrite: false
 
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(json), path(charmm)
+    tuple val(Rho_kg_per_m_cubed), path(json)
     path(grids)
     output:
     path("grids.png"), emit: fig
@@ -854,12 +967,12 @@ workflow build_system {
     build_solvent_system(statepoint_and_solvent_xml)
     write_namd_confs(build_solvent_system.out.system,jinja_channel)
     NAMD_NVT_equilibration(build_solvent_system.out.system, write_namd_confs.out.namd)
-    write_gomc_confs(build_solvent_system.out.charmm,NAMD_NVT_equilibration.out.restart_files)
-    GOMC_NPT_equilibration(write_gomc_confs.out.system)
-    write_gomc_calibration_confs(build_solvent_system.out.charmm,GOMC_NPT_equilibration.out.restart_files)
-    GOMC_Ewald_Calibration(write_gomc_calibration_confs.out.system)
-    GOMC_Ewald_Calibration.out.grids.view()
-    plot_grids(build_solvent_system.out.charmm,GOMC_Ewald_Calibration.out.grids)
+    GOMC_NPT_equilibration(build_solvent_system.out.system, build_solvent_system.out.npt_conf, NAMD_NVT_equilibration.out.restart_files)
+    //write_gomc_calibration_confs(build_solvent_system.out.charmm,GOMC_NPT_equilibration.out.restart_files)
+    GOMC_Ewald_Calibration(build_solvent_system.out.system, build_solvent_system.out.ewald_calibration_conf,\
+    GOMC_NPT_equilibration.out.restart_files)
+    //GOMC_Ewald_Calibration.out.grids.view()
+    plot_grids(build_solvent_system.out.statepoint,GOMC_Ewald_Calibration.out.grids)
 
 
     emit:
