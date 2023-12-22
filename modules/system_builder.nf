@@ -151,7 +151,8 @@ process build_solvent_system {
     tuple val(Rho_kg_per_m_cubed), path("statepoint.json"), emit: statepoint
     path("system_npt.conf"), emit: npt_conf
     path("ewald_calibration.conf"), emit: ewald_calibration_conf
-    
+    tuple val(Rho_kg_per_m_cubed), path("statepoint.json"), path("charmm.pkl"), emit: charmm
+
     script:
     """
     #!/usr/bin/env python
@@ -334,6 +335,10 @@ process build_solvent_system {
     end="15",delta="0.5")
     file1.writelines(defAlphaLine)
 
+    import pickle
+    # Pickling the object
+    with open('charmm.pkl', 'wb') as file:
+        pickle.dump(charmm, file)
 
     """
 }
