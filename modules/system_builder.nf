@@ -909,7 +909,7 @@ process plot_grids {
     tuple val(Rho_kg_per_m_cubed), path(json)
     path(grids)
     output:
-    path("grids.png"), emit: fig
+    path("grids.png"),path("limited_axes.png") emit: figs
     script:
     """
     #!/usr/bin/env python
@@ -940,9 +940,14 @@ process plot_grids {
 
     # Flatten the axes array to simplify indexing
     axes = axes.flatten()
-
+    import random
+    extended_markers = [
+        'o', 's', '^', 'v', '<', '>', 'D', 'p', '*', 'h', '+', 'x', '|', '_',
+        '.', ',', '1', '2', '3', '4', '8', 'H', 'd', 'D', 'P', 'X', 'o', 's', 'p', '*', 'h', '+', 'x'
+    ]
     # Iterate over files and plot each DataFrame in a subplot
     for i, file_name in enumerate(file_list):
+        random.seed(0)
         # Extract model name
         model_name = extract_model_name(file_name)
 
@@ -950,20 +955,55 @@ process plot_grids {
         df = pd.read_csv(file_name, index_col=0)
 
         # Plotting one line per row in the subplot
-        df.plot(ax=axes[i], marker='o', linestyle='-')
+        #df.plot(ax=axes[i], marker='o', linestyle='-', legend=False)
+        # Iterate over columns and plot each with a different marker and color
+        for column in df.columns:
+            # Generate random color and marker for each column
+            color = "#{:06x}".format(random.randint(0, 0xFFFFFF))  # Random hex color
+            marker = random.choice(extended_markers)  # Random marker
+            fill_style = random.choice(['full', 'left', 'right', 'none'])  # Random fill style
+
+            # Plotting one line per column in the subplot with random color, marker, and fill style
+            df[column].plot(
+                ax=axes[i],
+                marker=marker,
+                linestyle='-',
+                color=color,
+                fillstyle=fill_style,
+                legend=False
+            )
 
         # Set plot labels and title
         axes[i].set_xlabel('Alpha')
         axes[i].set_ylabel('Relative Error (Elec Energy)')
         axes[i].set_title(f'Model: {model_name}')
 
+    # Create a single legend for the entire figure outside the canvas to the right
+    handles, labels = axes[0].get_legend_handles_labels()
+    #fig.legend(handles, labels, loc='right')
+    legend = fig.legend(handles, labels, bbox_to_anchor=(1.10, 0.5), loc='center right')
     # Adjust layout
     plt.tight_layout()
 
     # Save the figure as 'grids.png'
-    plt.savefig('grids.png')
+    plt.savefig('grids.png', bbox_inches='tight', bbox_extra_artists=[legend])
 
     # Show the plot
+
+    # Create a second figure with subplots and limited y-axes to -1 to +1
+    fig2, axes2 = fig, axes
+
+    # Flatten the axes array to simplify indexing
+    axes2 = axes2.flatten()
+
+    # Iterate over subplots in the second figure and set y-axis limits
+    for ax in axes2:
+        ax.set_ylim(-1, 1)
+
+    # Save the second figure as 'limited_axes.png'
+    plt.savefig('limited_axes.png', bbox_inches='tight')
+
+    # Show the plots
     plt.show()
     """
 }
