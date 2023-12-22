@@ -102,7 +102,7 @@ process build_solvent_system_from_torch {
     charmm.write_pdb()
 
     #MC_steps=10000
-    MC_steps=1500
+    MC_steps=50000
 
     gomc_control.write_gomc_control_file(charmm, conf_filename='system',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         input_variables_dict={"ElectroStatic": True,
@@ -248,9 +248,10 @@ process build_solvent_system {
 
     charmm.write_pdb()
 
-    MC_steps=1500
+    MC_steps=50000
     restart_coor = "nvt_equil.restart.coor"
     restart_xsc = "nvt_equil.restart.xsc"
+    RCC = ${RcutCoulomb}
     gomc_control.write_gomc_control_file(charmm, conf_filename='system_npt',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
                                         check_input_files_exist=False, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
@@ -263,7 +264,7 @@ process build_solvent_system {
                                                             "PRNG": int(0),
                                                             "Rcut": 12,
                                                             "RcutLow": 1,
-                                                            "RcutCoulomb_box_0": 12,
+                                                            "RcutCoulomb_box_0": RCC,
                                                             "VDWGeometricSigma" : False,
                                                             "CoordinatesFreq" : [False,1000],
                                                             "DCDFreq" : [False,100],
@@ -272,21 +273,20 @@ process build_solvent_system {
                                                             "ConsoleFreq":[True,1],
                                                             "BlockAverageFreq":[True,MC_steps],
                                                             "HistogramFreq":[False,1000],
-                                                            "DisFreq":0.98,
+                                                            "DisFreq":0.00,
                                                             "RotFreq":0.0,
                                                             "IntraSwapFreq":0.0,
                                                             "RegrowthFreq":0.0,
                                                             "CrankShaftFreq":0.0,
                                                             "VolFreq":0.01,
-                                                            "MultiParticleFreq":0.01,
+                                                            "MultiParticleFreq":0.99,
                                                             "OutputName":"system_npt"
 
                                                                 }
                                         )
 
 
-    MC_steps=1500
-
+    MC_steps=50000
     restart_coor = "system_npt_BOX_0_restart.coor"
     restart_xsc = "system_npt_BOX_0_restart.xsc"
     restart_chk = "system_npt_restart.chk"
@@ -302,7 +302,7 @@ process build_solvent_system {
                                                             "PRNG": int(0),
                                                             "Rcut": 12,
                                                             "RcutLow": 1,
-                                                            "RcutCoulomb_box_0": 12,
+                                                            "RcutCoulomb_box_0": RCC,
                                                             "VDWGeometricSigma" : False,
                                                             "CoordinatesFreq" : [False,1000],
                                                             "DCDFreq" : [False,100],
@@ -311,28 +311,34 @@ process build_solvent_system {
                                                             "ConsoleFreq":[True,1],
                                                             "BlockAverageFreq":[True,MC_steps],
                                                             "HistogramFreq":[False,1000],
-                                                            "DisFreq":0.98,
+                                                            "DisFreq":0.00,
                                                             "RotFreq":0.0,
                                                             "IntraSwapFreq":0.0,
                                                             "RegrowthFreq":0.0,
                                                             "CrankShaftFreq":0.0,
                                                             "VolFreq":0.01,
-                                                            "MultiParticleFreq":0.01,
+                                                            "MultiParticleFreq":0.99,
                                                             "OutputName":"ewald_calibration"
 
                                                                 }
                                         )
-
+    NUM_POINTS = 50.0
+    RCC_START = 10.0
+    RCC_END = (liquid_box_length_Ang/2.0)*0.95
+    RCC_DELTA = (RCC_END-RCC_START)/(NUM_POINTS-1)
+    ALPHA_START = 0.0
+    ALPHA_END = 0.5
+    ALPHA_DELTA = (ALPHA_END-ALPHA_START)/(NUM_POINTS-1)
     file1 = open("ewald_calibration.conf", "a")
     defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file=restart_chk)
     file1.writelines(defAlphaLine)
     defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start="0.0",\
-    end="0.1",delta="0.1")
+    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start=ALPHA_START,\
+    end=ALPHA_END,delta=ALPHA_DELTA)
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfCutoffCoulombRange", box="0",start="14",\
-    end="15",delta="0.5")
+    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfCutoffCoulombRange", box="0",start=RCC_START,\
+    end=RCC_END,delta=RCC_DELTA)
     file1.writelines(defAlphaLine)
 
     import pickle
@@ -428,9 +434,9 @@ process write_namd_confs {
     minsteps=10000
     nvt_eq_steps=50000
     npt_eq_steps=100000
-    minsteps=1000
-    nvt_eq_steps=1000
-    npt_eq_steps=1000
+    #minsteps=1000
+    #nvt_eq_steps=1000
+    #npt_eq_steps=1000
     coords["waterModel"]="TIP3"
     coords["temp"]=loaded_point.temperature
     coords["outputname"]="minimization"
@@ -641,7 +647,7 @@ process write_gomc_confs {
     charmm.write_pdb()
 
     #MC_steps=10000
-    MC_steps=1500
+    MC_steps=50000
 
     gomc_control.write_gomc_control_file(charmm, conf_filename='system_nvt',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         input_variables_dict={"ElectroStatic": True,
@@ -696,13 +702,13 @@ process write_gomc_confs {
                                                             "ConsoleFreq":[True,1],
                                                             "BlockAverageFreq":[True,MC_steps],
                                                             "HistogramFreq":[False,1000],
-                                                            "DisFreq":0.98,
+                                                            "DisFreq":0.00,
                                                             "RotFreq":0.0,
                                                             "IntraSwapFreq":0.0,
                                                             "RegrowthFreq":0.0,
                                                             "CrankShaftFreq":0.0,
                                                             "VolFreq":0.01,
-                                                            "MultiParticleFreq":0.01,
+                                                            "MultiParticleFreq":0.99,
                                                             "OutputName":"system_npt"
 
                                                                 }
@@ -816,7 +822,7 @@ process write_gomc_calibration_confs {
     charmm.write_pdb()
 
     #MC_steps=10000
-    MC_steps=1500
+    MC_steps=50000
 
     restart_coor = "${restart_coor}"
     restart_xsc = "${restart_xsc}"
