@@ -137,7 +137,7 @@ process build_solvent_system_from_torch {
 
 process build_solvent_system {
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: true
 
     debug false
     input:
@@ -250,7 +250,7 @@ process build_solvent_system {
 
 process write_namd_confs {
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_input", mode: 'copy', overwrite: true
 
     debug false
     input:
@@ -368,7 +368,7 @@ process write_namd_confs {
 
 process NAMD_equilibration_solvent_system {
     container "${params.container__namd}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_namd_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_npt_eq", mode: 'copy', overwrite: true
     cpus 8
     debug false
     input:
@@ -394,7 +394,7 @@ process NAMD_equilibration_solvent_system {
 
 process NAMD_NVT_equilibration {
     container "${params.container__namd}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_namd_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_nvt_eq", mode: 'copy', overwrite: true
     cpus 8
     debug false
     input:
@@ -418,7 +418,7 @@ process NAMD_NVT_equilibration {
 
 process GOMC_NPT_equilibration {
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_gomc_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: true
     cpus 8
     debug false
     input:
@@ -440,7 +440,7 @@ process GOMC_NPT_equilibration {
 
 process NVT_equilibration_solvent_system {
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_nvt_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_nvt_eq", mode: 'copy', overwrite: true
     cpus 8
     debug false
     input:
@@ -462,7 +462,7 @@ process NVT_equilibration_solvent_system {
 
 process write_gomc_confs {
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_gomc_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: true
 
     debug false
     input:
@@ -612,7 +612,7 @@ process write_gomc_confs {
 
 process NPT_equilibration_solvent_system {
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_npt_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: true
     cpus 8
     debug false
     input:
@@ -634,7 +634,7 @@ process NPT_equilibration_solvent_system {
 
 process write_gomc_calibration_confs {
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}_ewald_calibration", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration", mode: 'copy', overwrite: true
 
     debug false
     input:
@@ -757,6 +757,27 @@ process write_gomc_calibration_confs {
 }
 
 
+process GOMC_Ewald_Calibration {
+    container "${params.container__gomc}"
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration", mode: 'copy', overwrite: true
+    cpus 8
+    debug false
+    input:
+    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path(npt_conf), path(restart_xsc), path(restart_coor), path(restart_chk)
+    output:
+    path("Wolf_Calibration_*"), emit: grids
+    tuple path("Ewald_Calibration.log"), path(npt_conf),  emit: record
+    shell:
+    """
+    
+    #!/bin/bash
+    cat ${npt_conf} > local.conf
+    GOMC_CPU_NPT +p${task.cpus} local.conf > Ewald_Calibration.log
+    """
+}
+
+
+
 workflow build_system {
     take:
     statepoint_and_solvent_xml
@@ -768,6 +789,7 @@ workflow build_system {
     write_gomc_confs(build_solvent_system.out.charmm,NAMD_NVT_equilibration.out.restart_files)
     GOMC_NPT_equilibration(write_gomc_confs.out.system)
     write_gomc_calibration_confs(build_solvent_system.out.charmm,GOMC_NPT_equilibration.out.restart_files)
+    GOMC_Ewald_Calibration(write_gomc_calibration_confs.out.system)
 
 
     emit:
