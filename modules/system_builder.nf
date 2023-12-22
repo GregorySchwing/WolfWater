@@ -462,7 +462,7 @@ process NVT_equilibration_solvent_system {
 
 process write_gomc_confs {
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq_input", mode: 'copy', overwrite: true
 
     debug false
     input:
@@ -634,7 +634,7 @@ process NPT_equilibration_solvent_system {
 
 process write_gomc_calibration_confs {
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration", mode: 'copy', overwrite: true
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_input", mode: 'copy', overwrite: true
 
     debug false
     input:
@@ -776,6 +776,68 @@ process GOMC_Ewald_Calibration {
     """
 }
 
+process plot_grids {
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_plots", mode: 'copy', overwrite: true
+
+    debug false
+    input:
+    tuple val(Rho_kg_per_m_cubed), path(json), path(charmm)
+    path(grids)
+    output:
+    path("grids.png"), emit: fig
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import re
+
+    # Function to extract model name from file name using regex
+    def extract_model_name(file_name):
+        match = re.match(r'Wolf_Calibration_(\\w+)_BOX_\\d+_Calibration.dat', file_name)
+        if match:
+            return match.group(1)
+        else:
+            return None
+
+    # Example list of files
+    file_list = "${grids}".split()
+
+    # Determine the number of subplots based on the number of files
+    num_subplots = len(file_list)
+
+    # Create a new figure with subplots
+    fig, axes = plt.subplots(num_subplots, 1, figsize=(10, 4 * num_subplots))
+
+    # Iterate over files and plot each DataFrame in a subplot
+    for i, file_name in enumerate(file_list):
+        # Extract model name
+        model_name = extract_model_name(file_name)
+
+        # Load the CSV file into a DataFrame
+        df = pd.read_csv(file_name, index_col=0)
+
+        # Plotting one line per row in the subplot
+        df.plot(ax=axes[i], marker='o', linestyle='-')
+
+        # Set plot labels and title
+        axes[i].set_xlabel('Index')
+        axes[i].set_ylabel('Values')
+        axes[i].set_title(f'Model: {model_name}')
+
+    # Adjust layout
+    plt.tight_layout()
+
+    # Save the figure as 'grids.png'
+    plt.savefig('grids.png')
+
+    # Show the plot
+    plt.show()
+
+    """
+}
+
 
 
 workflow build_system {
@@ -790,6 +852,8 @@ workflow build_system {
     GOMC_NPT_equilibration(write_gomc_confs.out.system)
     write_gomc_calibration_confs(build_solvent_system.out.charmm,GOMC_NPT_equilibration.out.restart_files)
     GOMC_Ewald_Calibration(write_gomc_calibration_confs.out.system)
+    GOMC_Ewald_Calibration.out.grids.view()
+    plot_grids(build_solvent_system.out.charmm,GOMC_Ewald_Calibration.out.grids)
 
 
     emit:
