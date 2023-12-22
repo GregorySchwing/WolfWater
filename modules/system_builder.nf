@@ -445,9 +445,9 @@ process write_namd_confs {
     minsteps=10000
     nvt_eq_steps=50000
     npt_eq_steps=100000
-    #minsteps=1000
-    #nvt_eq_steps=1000
-    #npt_eq_steps=1000
+    minsteps=1000
+    nvt_eq_steps=1000
+    npt_eq_steps=1000
     coords["waterModel"]="TIP3"
     coords["temp"]=loaded_point.temperature
     coords["outputname"]="minimization"
