@@ -641,7 +641,7 @@ process write_gomc_calibration_confs {
     tuple val(Rho_kg_per_m_cubed), path(json), path(charmm)
     tuple path(restart_xsc), path(restart_coor), path(restart_chk)
     output:
-    tuple val(Rho_kg_per_m_cubed),path("statepoint.json"),path("system.pdb"), path("system.psf"), path("system.inp"), path("system_npt.conf"), path(restart_xsc), path(restart_coor), path(restart_chk), emit: system
+    tuple val(Rho_kg_per_m_cubed),path("statepoint.json"),path("system.pdb"), path("system.psf"), path("system.inp"), path("ewald_calibration.conf"), path(restart_xsc), path(restart_coor), path(restart_chk), emit: system
     script:
     """
     #!/usr/bin/env python
@@ -708,7 +708,7 @@ process write_gomc_calibration_confs {
 
     restart_coor = "${restart_coor}"
     restart_xsc = "${restart_xsc}"
-    gomc_control.write_gomc_control_file(charmm, conf_filename='system_npt',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
+    gomc_control.write_gomc_control_file(charmm, conf_filename='ewald_calibration',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
                                         check_input_files_exist=False, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
                                         extendedSystem_box_0=restart_xsc,
@@ -736,12 +736,12 @@ process write_gomc_calibration_confs {
                                                             "CrankShaftFreq":0.0,
                                                             "VolFreq":0.01,
                                                             "MultiParticleFreq":0.99,
-                                                            "OutputName":"system_npt"
+                                                            "OutputName":"ewald_calibration"
 
                                                                 }
                                         )
 
-    file1 = open("system_npt.conf", "a")
+    file1 = open("ewald_calibration.conf", "a")
     defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="${restart_chk}")
     file1.writelines(defAlphaLine)
     defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
@@ -795,7 +795,7 @@ process plot_grids {
 
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
-        match = re.match(r'Wolf_Calibration_(\\w+)_BOX_\\d+_Calibration.dat', file_name)
+        match = re.match(r'Wolf_Calibration_(\\w+)_BOX_\\d+_(\\w+).dat', file_name)
         if match:
             return match.group(1)
         else:
@@ -807,8 +807,15 @@ process plot_grids {
     # Determine the number of subplots based on the number of files
     num_subplots = len(file_list)
 
-    # Create a new figure with subplots
-    fig, axes = plt.subplots(num_subplots, 1, figsize=(10, 4 * num_subplots))
+    # Calculate the number of rows and columns for subplots
+    num_rows = (num_subplots + 2) // 3  # Ensure at least 1 row
+    num_cols = min(3, num_subplots)
+
+    # Create a new figure with subplots arranged in rows and columns
+    fig, axes = plt.subplots(num_rows, num_cols, figsize=(15, 4 * num_rows))
+
+    # Flatten the axes array to simplify indexing
+    axes = axes.flatten()
 
     # Iterate over files and plot each DataFrame in a subplot
     for i, file_name in enumerate(file_list):
@@ -822,8 +829,8 @@ process plot_grids {
         df.plot(ax=axes[i], marker='o', linestyle='-')
 
         # Set plot labels and title
-        axes[i].set_xlabel('Index')
-        axes[i].set_ylabel('Values')
+        axes[i].set_xlabel('Alpha')
+        axes[i].set_ylabel('Relative Error (Elec Energy)')
         axes[i].set_title(f'Model: {model_name}')
 
     # Adjust layout
@@ -834,7 +841,6 @@ process plot_grids {
 
     # Show the plot
     plt.show()
-
     """
 }
 
