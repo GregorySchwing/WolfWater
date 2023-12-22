@@ -79,8 +79,8 @@ log.info """\
 
         // Create a channel with the CSV file
         csv_channel = channel.fromPath(input_csv)
-        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 2,quote:'"').map { 
-            row -> [row.temp_K, row.P_bar, row.No_mol, row.Rho_kg_per_m_cubed, row.L_m_if_cubed]
+        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: -1,quote:'"').map { 
+            row -> [row.temp_K, row.P_bar, row.No_mol, row.Rho_kg_per_m_cubed, row.L_m_if_cubed, row.RcutCoulomb]
         }
         //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
         //path_to_database = Channel.fromPath( params.database_path )
@@ -95,7 +95,7 @@ log.info """\
         solvent_xml_channel = Channel.fromPath( solvent_xml )
         jinja_channel = Channel.fromPath( [file(params.path_to_minimization_template),\
         file(params.path_to_nvt_template), file(params.path_to_npt_template)] ).collect()
-        system_input = solventData.combine(solvent_xml_channel)        
+        system_input = solventData.combine(solvent_xml_channel)     
         build_system(system_input,jinja_channel)
         return
         skopt_model = initialize_scikit_optimize_model(build_system.out.system)
