@@ -104,7 +104,7 @@ process build_solvent_system_from_torch {
 
     gomc_control.write_gomc_control_file(charmm, conf_filename='system',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         input_variables_dict={"ElectroStatic": True,
-                                                            "Ewald": False,
+                                                            "Ewald": True,
                                                             "PRNG": int(0),
                                                             "Rcut": 12,
                                                             "RcutLow": 1,
@@ -572,7 +572,7 @@ process write_gomc_confs {
                                         Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
                                         extendedSystem_box_0=restart_xsc,
                                         input_variables_dict={"ElectroStatic": True,
-                                                            "Ewald": False,
+                                                            "Ewald": True,
                                                             "EqSteps" : 1000,
                                                             "AdjSteps":10,
                                                             "Pressure" : float(pressure), 
@@ -713,7 +713,7 @@ process write_gomc_calibration_confs {
                                         Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
                                         extendedSystem_box_0=restart_xsc,
                                         input_variables_dict={"ElectroStatic": True,
-                                                            "Ewald": False,
+                                                            "Ewald": True,
                                                             "EqSteps" : 1000,
                                                             "AdjSteps":10,
                                                             "Pressure" : float(pressure), 
@@ -743,6 +743,14 @@ process write_gomc_calibration_confs {
 
     file1 = open("system_npt.conf", "a")
     defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="${restart_chk}")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start="0.0",\
+    end="0.5",delta="0.1")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfCutoffCoulombRange", box="0",start="10",\
+    end="15",delta="0.5")
     file1.writelines(defAlphaLine)
 
     """
