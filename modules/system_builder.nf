@@ -339,12 +339,12 @@ process write_namd_confs {
 
     coords = {}
 
-    minsteps=10000
-    nvt_eq_steps=50000
-    npt_eq_steps=100000
-    minsteps=500
-    nvt_eq_steps=500
-    npt_eq_steps=500
+    #minsteps=10000
+    #nvt_eq_steps=50000
+    #npt_eq_steps=100000
+    minsteps=1000
+    nvt_eq_steps=20000
+    npt_eq_steps=20000
     coords["waterModel"]="TIP3"
     coords["temp"]=loaded_point.temperature
     coords["rcut_couloumb"]=loaded_point.rcut_couloumb
