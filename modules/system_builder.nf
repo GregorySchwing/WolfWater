@@ -102,7 +102,7 @@ process build_solvent_system_from_torch {
     charmm.write_pdb()
 
     #MC_steps=10000
-    MC_steps=50000
+    MC_steps=5000
 
     gomc_control.write_gomc_control_file(charmm, conf_filename='system',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         input_variables_dict={"ElectroStatic": True,
@@ -142,6 +142,7 @@ process build_solvent_system {
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: false
+    cpus 1
 
     debug false
     input:
@@ -149,8 +150,7 @@ process build_solvent_system {
     output:
     tuple val(Rho_kg_per_m_cubed),path("statepoint.json"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp"), emit: system
     tuple val(Rho_kg_per_m_cubed), path("statepoint.json"), emit: statepoint
-    path("system_npt.conf"), emit: npt_conf
-    path("ewald_calibration.conf"), emit: ewald_calibration_conf
+    //path("system_npt.conf"), emit: npt_conf
     tuple val(Rho_kg_per_m_cubed), path("statepoint.json"), path("charmm.pkl"), emit: charmm
 
     script:
@@ -248,103 +248,10 @@ process build_solvent_system {
 
     charmm.write_pdb()
 
-    MC_steps=50000
-    restart_coor = "nvt_equil.restart.coor"
-    restart_xsc = "nvt_equil.restart.xsc"
-    RCC = ${RcutCoulomb}
-    gomc_control.write_gomc_control_file(charmm, conf_filename='system_npt',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
-                                        check_input_files_exist=False, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
-                                        Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
-                                        extendedSystem_box_0=restart_xsc,
-                                        input_variables_dict={"ElectroStatic": True,
-                                                            "Ewald": True,
-                                                            "EqSteps" : 1000,
-                                                            "AdjSteps":10,
-                                                            "Pressure" : float(pressure), 
-                                                            "PRNG": int(0),
-                                                            "Rcut": 12,
-                                                            "RcutLow": 1,
-                                                            "RcutCoulomb_box_0": RCC,
-                                                            "VDWGeometricSigma" : False,
-                                                            "CoordinatesFreq" : [False,1000],
-                                                            "DCDFreq" : [False,100],
-                                                            "RestartFreq":[True,MC_steps],
-                                                            "CheckpointFreq":[True,MC_steps],
-                                                            "ConsoleFreq":[True,1],
-                                                            "BlockAverageFreq":[True,MC_steps],
-                                                            "HistogramFreq":[False,1000],
-                                                            "DisFreq":0.00,
-                                                            "RotFreq":0.0,
-                                                            "IntraSwapFreq":0.0,
-                                                            "RegrowthFreq":0.0,
-                                                            "CrankShaftFreq":0.0,
-                                                            "VolFreq":0.01,
-                                                            "MultiParticleFreq":0.99,
-                                                            "OutputName":"system_npt"
-
-                                                                }
-                                        )
-
-
-    MC_steps=50000
-    restart_coor = "system_npt_BOX_0_restart.coor"
-    restart_xsc = "system_npt_BOX_0_restart.xsc"
-    restart_chk = "system_npt_restart.chk"
-    gomc_control.write_gomc_control_file(charmm, conf_filename='ewald_calibration',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
-                                        check_input_files_exist=False, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
-                                        Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
-                                        extendedSystem_box_0=restart_xsc,
-                                        input_variables_dict={"ElectroStatic": True,
-                                                            "Ewald": True,
-                                                            "EqSteps" : 1000,
-                                                            "AdjSteps":10,
-                                                            "Pressure" : float(pressure), 
-                                                            "PRNG": int(0),
-                                                            "Rcut": 12,
-                                                            "RcutLow": 1,
-                                                            "RcutCoulomb_box_0": RCC,
-                                                            "VDWGeometricSigma" : False,
-                                                            "CoordinatesFreq" : [False,1000],
-                                                            "DCDFreq" : [False,100],
-                                                            "RestartFreq":[True,MC_steps],
-                                                            "CheckpointFreq":[True,MC_steps],
-                                                            "ConsoleFreq":[True,1],
-                                                            "BlockAverageFreq":[True,MC_steps],
-                                                            "HistogramFreq":[False,1000],
-                                                            "DisFreq":0.00,
-                                                            "RotFreq":0.0,
-                                                            "IntraSwapFreq":0.0,
-                                                            "RegrowthFreq":0.0,
-                                                            "CrankShaftFreq":0.0,
-                                                            "VolFreq":0.01,
-                                                            "MultiParticleFreq":0.99,
-                                                            "OutputName":"ewald_calibration"
-
-                                                                }
-                                        )
-    NUM_POINTS = 50.0
-    RCC_START = 10.0
-    RCC_END = (liquid_box_length_Ang/2.0)*0.95
-    RCC_DELTA = (RCC_END-RCC_START)/(NUM_POINTS-1)
-    ALPHA_START = 0.0
-    ALPHA_END = 0.5
-    ALPHA_DELTA = (ALPHA_END-ALPHA_START)/(NUM_POINTS-1)
-    file1 = open("ewald_calibration.conf", "a")
-    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file=restart_chk)
-    file1.writelines(defAlphaLine)
-    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
-    file1.writelines(defAlphaLine)
-    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start=ALPHA_START,\
-    end=ALPHA_END,delta=ALPHA_DELTA)
-    file1.writelines(defAlphaLine)
-    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfCutoffCoulombRange", box="0",start=RCC_START,\
-    end=RCC_END,delta=RCC_DELTA)
-    file1.writelines(defAlphaLine)
-
     import pickle
-    # Pickling the object
-    with open('charmm.pkl', 'wb') as file:
-        pickle.dump(charmm, file)
+    # Unpickling the object
+    with open("charmm.pkl", 'wb') as file:
+         pickle.dump(charmm, file)
 
     """
 }
@@ -355,6 +262,7 @@ process write_namd_confs {
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_input", mode: 'copy', overwrite: false
+    cpus 1
 
     debug false
     input:
@@ -434,11 +342,13 @@ process write_namd_confs {
     minsteps=10000
     nvt_eq_steps=50000
     npt_eq_steps=100000
-    #minsteps=1000
-    #nvt_eq_steps=1000
-    #npt_eq_steps=1000
+    minsteps=500
+    nvt_eq_steps=500
+    npt_eq_steps=500
     coords["waterModel"]="TIP3"
     coords["temp"]=loaded_point.temperature
+    coords["rcut_couloumb"]=loaded_point.rcut_couloumb
+    coords["pairlistdist"]=loaded_point.rcut_couloumb+(loaded_point.rcut_couloumb*0.1)
     coords["outputname"]="minimization"
     coords["minimize_steps"]=minsteps
 
@@ -577,10 +487,11 @@ process write_gomc_confs {
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq_input", mode: 'copy', overwrite: false
+    cpus 1
 
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(json)
+    tuple val(Rho_kg_per_m_cubed), path(json), path(charmm)
     tuple path(restart_xsc), path(restart_coor)
     output:
     path("system_npt.conf"), emit: npt_conf
@@ -629,10 +540,12 @@ process write_gomc_confs {
     
     pressure=loaded_point.pressure
 
+    RCC = loaded_point.rcut_couloumb
+
 
     # Build the Charmm object, which is required to write the
     # FF (.inp), psf, pdb, and GOMC control files [1, 2, 5-10, 13-17]
-
+    import pickle
     # Unpickling the object
     with open("${charmm}", 'rb') as file:
         charmm = pickle.load(file)
@@ -640,45 +553,8 @@ process write_gomc_confs {
     ### Note:  The electrostatics and Ewald are turned off in the
     # GOMC control file (i.e., False) since the n-alkanes beads in the
     # trappe-ua force field have no charge (i.e., the bead charges are all zero)
-    charmm.write_inp()
 
-    charmm.write_psf()
-
-    charmm.write_pdb()
-
-    #MC_steps=10000
-    MC_steps=50000
-
-    gomc_control.write_gomc_control_file(charmm, conf_filename='system_nvt',  ensemble_type='NVT', RunSteps=MC_steps, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
-                                        input_variables_dict={"ElectroStatic": True,
-                                                            "Ewald": True,
-                                                            "EqSteps" : 1000,
-                                                            "AdjSteps":10,
-                                                            "Pressure" : float(pressure), 
-                                                            "PRNG": int(0),
-                                                            "Rcut": 12,
-                                                            "RcutLow": 1,
-                                                            "RcutCoulomb_box_0": 12,
-                                                            "VDWGeometricSigma" : False,
-                                                            "CoordinatesFreq" : [False,1000],
-                                                            "DCDFreq" : [False,100],
-                                                            "RestartFreq":[True,MC_steps],
-                                                            "CheckpointFreq":[True,MC_steps],
-                                                            "ConsoleFreq":[True,1],
-                                                            "BlockAverageFreq":[True,MC_steps],
-                                                            "HistogramFreq":[False,1000],
-                                                            "DisFreq":0.0,
-                                                            "RotFreq":0.0,
-                                                            "IntraSwapFreq":0.0,
-                                                            "RegrowthFreq":0.0,
-                                                            "CrankShaftFreq":0.0,
-                                                            "MultiParticleFreq":1.00,
-                                                            "OutputName":"system_nvt"
-
-                                                                }
-                                        )
-    restart_coor = "system_nvt_BOX_0_restart.coor"
-    restart_xsc = "system_nvt_BOX_0_restart.xsc"
+    MC_steps=5000
     restart_coor = "${restart_coor}"
     restart_xsc = "${restart_xsc}"
     gomc_control.write_gomc_control_file(charmm, conf_filename='system_npt',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
@@ -693,7 +569,7 @@ process write_gomc_confs {
                                                             "PRNG": int(0),
                                                             "Rcut": 12,
                                                             "RcutLow": 1,
-                                                            "RcutCoulomb_box_0": 12,
+                                                            "RcutCoulomb_box_0": RCC,
                                                             "VDWGeometricSigma" : False,
                                                             "CoordinatesFreq" : [False,1000],
                                                             "DCDFreq" : [False,100],
@@ -702,24 +578,17 @@ process write_gomc_confs {
                                                             "ConsoleFreq":[True,1],
                                                             "BlockAverageFreq":[True,MC_steps],
                                                             "HistogramFreq":[False,1000],
-                                                            "DisFreq":0.00,
+                                                            "DisFreq":0.98,
                                                             "RotFreq":0.0,
                                                             "IntraSwapFreq":0.0,
                                                             "RegrowthFreq":0.0,
                                                             "CrankShaftFreq":0.0,
                                                             "VolFreq":0.01,
-                                                            "MultiParticleFreq":0.99,
+                                                            "MultiParticleFreq":0.01,
                                                             "OutputName":"system_npt"
 
                                                                 }
                                         )
-
-    #file1 = open("system_npt.conf", "a")
-    #defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="system_nvt_restart.chk")
-    #file1.writelines(defAlphaLine)
-
-
-
 
     """
 }
@@ -753,13 +622,15 @@ process write_gomc_calibration_confs {
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_input", mode: 'copy', overwrite: false
+    cpus 1
 
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(json)
-    tuple path(restart_xsc), path(restart_coor), path(restart_chk)
+    tuple val(Rho_kg_per_m_cubed), path(json), path(charmm)
+    //tuple path(restart_xsc), path(restart_coor), path(restart_chk)
+    tuple path(restart_xsc), path(restart_coor)
     output:
-    tuple val(Rho_kg_per_m_cubed),path("statepoint.json"),path("system.pdb"), path("system.psf"), path("system.inp"), path("ewald_calibration.conf"), path(restart_xsc), path(restart_coor), path(restart_chk), emit: system
+    path("ewald_calibration.conf"), emit: ewald_calibration_conf
     script:
     """
     #!/usr/bin/env python
@@ -804,10 +675,11 @@ process write_gomc_calibration_confs {
     
     pressure=loaded_point.pressure
 
+    RCC = loaded_point.rcut_couloumb
 
     # Build the Charmm object, which is required to write the
     # FF (.inp), psf, pdb, and GOMC control files [1, 2, 5-10, 13-17]
-
+    import pickle
     # Unpickling the object
     with open("${charmm}", 'rb') as file:
         charmm = pickle.load(file)
@@ -815,18 +687,15 @@ process write_gomc_calibration_confs {
     ### Note:  The electrostatics and Ewald are turned off in the
     # GOMC control file (i.e., False) since the n-alkanes beads in the
     # trappe-ua force field have no charge (i.e., the bead charges are all zero)
-    charmm.write_inp()
 
-    charmm.write_psf()
-
-    charmm.write_pdb()
-
-    #MC_steps=10000
-    MC_steps=50000
+    MC_steps=10000
+    #MC_steps=5000
 
     restart_coor = "${restart_coor}"
     restart_xsc = "${restart_xsc}"
-    gomc_control.write_gomc_control_file(charmm, conf_filename='ewald_calibration',  ensemble_type='NPT', RunSteps=MC_steps, Restart=True, \
+    MC_steps=5000
+    #restart_chk = ""
+    gomc_control.write_gomc_control_file(charmm, conf_filename='ewald_calibration',  ensemble_type='NVT', RunSteps=MC_steps, Restart=True, \
                                         check_input_files_exist=False, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
                                         Coordinates_box_0="system.pdb",Structure_box_0="system.psf",binCoordinates_box_0=restart_coor,
                                         extendedSystem_box_0=restart_xsc,
@@ -838,7 +707,7 @@ process write_gomc_calibration_confs {
                                                             "PRNG": int(0),
                                                             "Rcut": 12,
                                                             "RcutLow": 1,
-                                                            "RcutCoulomb_box_0": 12,
+                                                            "RcutCoulomb_box_0": RCC,
                                                             "VDWGeometricSigma" : False,
                                                             "CoordinatesFreq" : [False,1000],
                                                             "DCDFreq" : [False,100],
@@ -847,28 +716,34 @@ process write_gomc_calibration_confs {
                                                             "ConsoleFreq":[True,1],
                                                             "BlockAverageFreq":[True,MC_steps],
                                                             "HistogramFreq":[False,1000],
-                                                            "DisFreq":0.0,
-                                                            "RotFreq":0.0,
+                                                            "DisFreq":0.50,
+                                                            "RotFreq":0.50,
                                                             "IntraSwapFreq":0.0,
                                                             "RegrowthFreq":0.0,
                                                             "CrankShaftFreq":0.0,
-                                                            "VolFreq":0.01,
-                                                            "MultiParticleFreq":0.99,
+                                                            "VolFreq":0.00,
+                                                            "MultiParticleFreq":0.00,
                                                             "OutputName":"ewald_calibration"
 
                                                                 }
                                         )
-
+    NUM_POINTS = 50.0
+    RCC_START = 10.0
+    RCC_END = (liquid_box_length_Ang/2.0)*0.95
+    RCC_DELTA = (RCC_END-RCC_START)/(NUM_POINTS-1)
+    ALPHA_START = 0.0
+    ALPHA_END = 0.5
+    ALPHA_DELTA = (ALPHA_END-ALPHA_START)/(NUM_POINTS-1)
     file1 = open("ewald_calibration.conf", "a")
-    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="${restart_chk}")
-    file1.writelines(defAlphaLine)
+    #defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file=restart_chk)
+    #file1.writelines(defAlphaLine)
     defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start="0.0",\
-    end="0.1",delta="0.1")
+    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start=ALPHA_START,\
+    end=ALPHA_END,delta=ALPHA_DELTA)
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfCutoffCoulombRange", box="0",start="14",\
-    end="15",delta="0.5")
+    defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfCutoffCoulombRange", box="0",start=RCC_START,\
+    end=RCC_END,delta=RCC_DELTA)
     file1.writelines(defAlphaLine)
 
     """
@@ -885,7 +760,8 @@ process GOMC_Ewald_Calibration {
     input:
     tuple val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
     path(ewald_calibration_conf)
-    tuple path(restart_xsc), path(restart_coor), path(restart_chk)
+    //tuple path(restart_xsc), path(restart_coor), path(restart_chk)
+    tuple path(restart_xsc), path(restart_coor)
     output:
     path("Wolf_Calibration_*"), emit: grids
     path("Ewald_Calibration.log"),  emit: record
@@ -894,7 +770,7 @@ process GOMC_Ewald_Calibration {
     
     #!/bin/bash
     cat ${ewald_calibration_conf} > local.conf
-    GOMC_CPU_NPT +p${task.cpus} local.conf > Ewald_Calibration.log
+    GOMC_CPU_NVT +p${task.cpus} local.conf > Ewald_Calibration.log
     """
 }
 
@@ -903,13 +779,14 @@ process plot_grids {
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_plots", mode: 'copy', overwrite: false
+    cpus 1
 
     debug false
     input:
     tuple val(Rho_kg_per_m_cubed), path(json)
     path(grids)
     output:
-    path("grids.png"),path("limited_axes.png") emit: figs
+    tuple path("grids.png"), path("limited_axes.png"), emit: figs
     script:
     """
     #!/usr/bin/env python
@@ -1018,11 +895,11 @@ workflow build_system {
     build_solvent_system(statepoint_and_solvent_xml)
     write_namd_confs(build_solvent_system.out.system,jinja_channel)
     NAMD_NVT_equilibration(build_solvent_system.out.system, write_namd_confs.out.namd)
-    GOMC_NPT_equilibration(build_solvent_system.out.system, build_solvent_system.out.npt_conf, NAMD_NVT_equilibration.out.restart_files)
-    //write_gomc_calibration_confs(build_solvent_system.out.charmm,GOMC_NPT_equilibration.out.restart_files)
-    GOMC_Ewald_Calibration(build_solvent_system.out.system, build_solvent_system.out.ewald_calibration_conf,\
-    GOMC_NPT_equilibration.out.restart_files)
-    //GOMC_Ewald_Calibration.out.grids.view()
+    //write_gomc_confs(build_solvent_system.out.charmm,NAMD_NVT_equilibration.out.restart_files)
+    //GOMC_NPT_equilibration(build_solvent_system.out.system, write_gomc_confs.out.npt_conf, NAMD_NVT_equilibration.out.restart_files)
+    write_gomc_calibration_confs(build_solvent_system.out.charmm,NAMD_NVT_equilibration.out.restart_files)
+    GOMC_Ewald_Calibration(build_solvent_system.out.system, write_gomc_calibration_confs.out.ewald_calibration_conf,\
+    NAMD_NVT_equilibration.out.restart_files)
     plot_grids(build_solvent_system.out.statepoint,GOMC_Ewald_Calibration.out.grids)
 
 
