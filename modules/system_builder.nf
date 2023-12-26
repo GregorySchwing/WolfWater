@@ -727,7 +727,7 @@ process write_gomc_calibration_confs {
 
                                                                 }
                                         )
-    NUM_POINTS = 50.0
+    NUM_POINTS = 5.0
     RCC_START = 10.0
     RCC_END = int(liquid_box_length_Ang/2.0)
     #RCC_END = (liquid_box_length_Ang/2.0)*0.95
@@ -787,14 +787,14 @@ process plot_grids {
     tuple val(Rho_kg_per_m_cubed), path(json)
     path(grids)
     output:
-    tuple path("grids.png"), path("limited_axes.png"), emit: figs
+    tuple path("grids*.png"), path("limited_axes.png"), emit: figs
     script:
     """
     #!/usr/bin/env python
     import pandas as pd
     import matplotlib.pyplot as plt
     import re
-
+    import numpy as np
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
         match = re.match(r'Wolf_Calibration_(\\w+)_BOX_\\d+_(\\w+).dat', file_name)
@@ -816,8 +816,15 @@ process plot_grids {
     # Create a new figure with subplots arranged in rows and columns
     fig, axes = plt.subplots(num_rows, num_cols, figsize=(15, 4 * num_rows))
 
+    # Create a new figure with subplots arranged in rows and columns
+    fig_slopes, axes_slopes = plt.subplots(num_rows, num_cols, figsize=(15, 4 * num_rows))
+
+    fig_convergence, axes_convergence = plt.subplots(num_rows, num_cols, figsize=(15, 4 * num_rows),sharex=True)
+
     # Flatten the axes array to simplify indexing
     axes = axes.flatten()
+    axes_slopes = axes_slopes.flatten()
+    axes_convergence = axes_convergence.flatten()
     import random
     extended_markers = [
         'o', 's', '^', 'v', '<', '>', 'D', 'p', '*', 'h', '+', 'x', '|', '_',
@@ -831,6 +838,22 @@ process plot_grids {
 
         # Load the CSV file into a DataFrame
         df = pd.read_csv(file_name, index_col=0)
+        df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
+        desired_y_values = np.arange(-1, 1.1, 0.1)
+        slopes_within_tol_df = pd.DataFrame(index=desired_y_values, columns=df.columns)
+        for col in df.columns:
+            x = df.index  # Using DataFrame indices as x-values
+            y = df[col]
+
+            # Calculate the slope using numpy's gradient function
+            df_slopes[col] = np.gradient(y, x)
+
+        slope_at_desired_y = pd.Series(index=df.columns)
+
+        for col in df.columns:
+            # Interpolate to find the slope at the desired y-axis value
+            slopes_within_tol_df[col] = np.interp(desired_y_values, df[col], df_slopes[col])
+
 
         # Plotting one line per row in the subplot
         #df.plot(ax=axes[i], marker='o', linestyle='-', legend=False)
@@ -851,20 +874,55 @@ process plot_grids {
                 legend=False
             )
 
+            # Plotting one line per column in the subplot with random color, marker, and fill style
+            df_slopes[column].plot(
+                ax=axes_slopes[i],
+                marker=marker,
+                linestyle='-',
+                color=color,
+                fillstyle=fill_style,
+                legend=False
+            )
+
+
+            # Plotting one line per column in the subplot with random color, marker, and fill style
+            slopes_within_tol_df[column].plot(
+                ax=axes_convergence[i],
+                marker=marker,
+                linestyle='-',
+                color=color,
+                fillstyle=fill_style,
+                legend=False
+            )
+
         # Set plot labels and title
         axes[i].set_xlabel('Alpha')
         axes[i].set_ylabel('Relative Error (Elec Energy)')
         axes[i].set_title(f'Model: {model_name}')
+
+        # Set plot labels and title
+        axes_slopes[i].set_xlabel('α')
+        axes_slopes[i].set_ylabel('d/dα f(α)')
+        axes_slopes[i].set_title(f'Model: {model_name}')
+
+
+        # Set plot labels and title
+        axes_convergence[i].set_xlabel('f(α)')
+        axes_convergence[i].set_ylabel('d/dα f(α)')
+        axes_convergence[i].set_title(f'Model: {model_name}')
+
 
     # Create a single legend for the entire figure outside the canvas to the right
     handles, labels = axes[0].get_legend_handles_labels()
     #fig.legend(handles, labels, loc='right')
     legend = fig.legend(handles, labels, bbox_to_anchor=(1.10, 0.5), loc='center right')
     # Adjust layout
-    plt.tight_layout()
-
+    fig.tight_layout()
+    fig_slopes.tight_layout()
     # Save the figure as 'grids.png'
-    plt.savefig('grids.png', bbox_inches='tight', bbox_extra_artists=[legend])
+    fig.savefig('grids.png', bbox_inches='tight', bbox_extra_artists=[legend])
+    fig_slopes.savefig('grids_slopes.png', bbox_inches='tight', bbox_extra_artists=[legend])
+    fig_convergence.savefig('grids_convergence.png', bbox_inches='tight', bbox_extra_artists=[legend])
 
     # Show the plot
 
@@ -881,11 +939,12 @@ process plot_grids {
     # Save the second figure as 'limited_axes.png'
     plt.savefig('limited_axes.png', bbox_inches='tight')
 
+
+
     # Show the plots
     plt.show()
     """
 }
-
 
 
 workflow build_system {
