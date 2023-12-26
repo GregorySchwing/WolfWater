@@ -727,7 +727,7 @@ process write_gomc_calibration_confs {
 
                                                                 }
                                         )
-    NUM_POINTS = 5.0
+    NUM_POINTS = 50.0
     RCC_START = 10.0
     RCC_END = int(liquid_box_length_Ang/2.0)
     #RCC_END = (liquid_box_length_Ang/2.0)*0.95
