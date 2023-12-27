@@ -922,8 +922,8 @@ process plot_grids {
                 marker=marker,
                 linestyle='-',
                 color=color,
-                fillstyle=fill_style,
-                legend=False
+                fillstyle=fill_style, 
+                label=None
             )
 
         axes[i].text(result_dict['ConvergedAlpha'], result_dict['ConvergedFAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
