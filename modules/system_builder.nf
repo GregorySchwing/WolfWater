@@ -797,26 +797,6 @@ process plot_grids {
     import numpy as np
 
 
-    # Function to get row, column index, and value closest to zero
-    def get_closest_to_zero_index_and_value(df):
-        # Calculate absolute differences from zero for each element in the DataFrame
-        absolute_diff = df.abs()
-
-        # Find the minimum absolute difference for each row
-        min_diff_per_row = absolute_diff.min(axis=1)
-
-        # Find the index of the minimum absolute difference for the entire DataFrame
-        closest_to_zero_row_index = min_diff_per_row.idxmin()
-
-        # Find the column index of the minimum absolute difference for the selected row
-        closest_to_zero_col_index = absolute_diff.loc[closest_to_zero_row_index].idxmin()
-
-        # Find the value corresponding to the closest-to-zero element
-        closest_to_zero_value = df.loc[closest_to_zero_row_index, closest_to_zero_col_index]
-
-        return closest_to_zero_row_index, closest_to_zero_col_index, closest_to_zero_value
-
-
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
         match = re.match(r'Wolf_Calibration_(\\w+)_BOX_\\d+_(\\w+).dat', file_name)
@@ -876,28 +856,33 @@ process plot_grids {
             # Calculate the slope using numpy's gradient function
             df_slopes[col] = np.gradient(y, x)
 
-        slope_at_desired_y = pd.Series(index=df.columns)
 
-        for col in df.columns:
-            # Interpolate to find the slope at the desired y-axis value
-            slopes_within_tol_df[col] = np.interp(desired_y_values, df[col], df_slopes[col])
-            alphas_within_tol_df[col] = np.interp(desired_y_values, df[col], df.index)
+        abs_df = df.abs()
+        abs_slopes_df = slopes_df.abs()
 
-        result_row, result_col, result_value = get_closest_to_zero_index_and_value(slopes_within_tol_df)
-        converged_alpha = np.interp(result_row, alphas_within_tol_df.index,alphas_within_tol_df[result_col])
+        normalized_df=(abs_df-abs_df.min())/(abs_df.max()-abs_df.min())
+        normalized_slopes_df=(abs_slopes_df-abs_slopes_df.min())/(abs_slopes_df.max()-abs_slopes_df.min())
 
-        # Print the result
-        print("Converged RCut:", result_col)
-        print("Converged α:", converged_alpha)
-        print("Converged f(α):", result_row)
-        print("Converged d/dα f(α):", result_value)
+        # Calculate Euclidean distance for each tuple across all columns
+        tuple_df = pd.concat([normalized_df, normalized_slopes_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
+
+        # Find the row and column of the minimum entry
+        min_entry_location = tuple_df.unstack().idxmin()
+
+        # Extract row and column indices
+        min_row, min_col = min_entry_location
+
+        print(f"RCut of Minimum Entry: {min_row}")
+        print(f"Alpha of Minimum Entry: {min_col}")
+        print(f"Slope of Minimum Entry: ",slopes_df[min_row][min_col])
+        print(f"F(alpha) of Minimum Entry: ",df[min_row][min_col])
 
         # Create a dictionary with the information
         result_dict = {
-            'ConvergedRCut': result_col,
-            'ConvergedAlpha': converged_alpha,  # Assuming column names are α
-            'ConvergedFAlpha': result_row,
-            'ConvergedDFDAlpha': result_value
+            'ConvergedRCut': min_row,
+            'ConvergedAlpha': min_col,  # Assuming column names are α
+            'ConvergedFAlpha': df[min_row][min_col],
+            'ConvergedDFDAlpha': slopes_df[min_row][min_col]
         }
 
         model_dict[model_name]=result_dict
@@ -953,8 +938,8 @@ process plot_grids {
         axes_convergence[i].plot(result_dict['ConvergedFAlpha'], result_dict['ConvergedDFDAlpha'], marker='*', markersize=20, linestyle='None', color='red')
 
         # Set plot labels and title
-        axes[i].set_xlabel('Alpha')
-        axes[i].set_ylabel('Relative Error (Elec Energy)')
+        axes[i].set_xlabel('α')
+        axes[i].set_ylabel('f(α)')
         axes[i].set_title(f'Model: {model_name}')
 
         # Set plot labels and title
