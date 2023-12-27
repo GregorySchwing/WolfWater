@@ -846,8 +846,6 @@ process plot_grids {
         df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
 
         desired_y_values = np.arange(-1, 1.1, 0.1)
-        slopes_within_tol_df = pd.DataFrame(index=desired_y_values, columns=df.columns)
-        alphas_within_tol_df = pd.DataFrame(index=desired_y_values, columns=df.columns)
 
         for col in df.columns:
             x = df.index  # Using DataFrame indices as x-values
@@ -858,7 +856,7 @@ process plot_grids {
 
 
         abs_df = df.abs()
-        abs_slopes_df = slopes_df.abs()
+        abs_slopes_df = df_slopes.abs()
 
         normalized_df=(abs_df-abs_df.min())/(abs_df.max()-abs_df.min())
         normalized_slopes_df=(abs_slopes_df-abs_slopes_df.min())/(abs_slopes_df.max()-abs_slopes_df.min())
@@ -874,7 +872,7 @@ process plot_grids {
 
         print(f"RCut of Minimum Entry: {min_row}")
         print(f"Alpha of Minimum Entry: {min_col}")
-        print(f"Slope of Minimum Entry: ",slopes_df[min_row][min_col])
+        print(f"Slope of Minimum Entry: ",df_slopes[min_row][min_col])
         print(f"F(alpha) of Minimum Entry: ",df[min_row][min_col])
 
         # Create a dictionary with the information
@@ -882,7 +880,7 @@ process plot_grids {
             'ConvergedRCut': min_row,
             'ConvergedAlpha': min_col,  # Assuming column names are α
             'ConvergedFAlpha': df[min_row][min_col],
-            'ConvergedDFDAlpha': slopes_df[min_row][min_col]
+            'ConvergedDFDAlpha': df_slopes[min_row][min_col]
         }
 
         model_dict[model_name]=result_dict
@@ -918,7 +916,7 @@ process plot_grids {
 
 
             # Plotting one line per column in the subplot with random color, marker, and fill style
-            slopes_within_tol_df[column].plot(
+            df_slopes[column].plot(
                 ax=axes_convergence[i],
                 marker=marker,
                 linestyle='-',
