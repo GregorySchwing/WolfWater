@@ -916,15 +916,15 @@ process plot_grids {
 
 
             # Plotting one line per column in the subplot with random color, marker, and fill style
-            df_slopes[column].plot(
-                ax=axes_convergence[i],
+            axes_convergence[i].plot(
+                df[col], 
+                slopes_df[col],
                 marker=marker,
                 linestyle='-',
                 color=color,
                 fillstyle=fill_style,
                 legend=False
             )
-
 
         axes[i].text(result_dict['ConvergedAlpha'], result_dict['ConvergedFAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
         axes[i].plot(result_dict['ConvergedAlpha'], result_dict['ConvergedFAlpha'], marker='*', markersize=20, linestyle='None', color='red')
@@ -935,7 +935,7 @@ process plot_grids {
         axes_convergence[i].text(result_dict['ConvergedFAlpha'], result_dict['ConvergedDFDAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
         axes_convergence[i].plot(result_dict['ConvergedFAlpha'], result_dict['ConvergedDFDAlpha'], marker='*', markersize=20, linestyle='None', color='red')
 
-        # Set plot labels and title
+        # Set plot labels and title 
         axes[i].set_xlabel('α')
         axes[i].set_ylabel('f(α)')
         axes[i].set_title(f'Model: {model_name}')
