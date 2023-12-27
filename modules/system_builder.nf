@@ -918,7 +918,7 @@ process plot_grids {
             # Plotting one line per column in the subplot with random color, marker, and fill style
             axes_convergence[i].plot(
                 df[column], 
-                slopes_df[column],
+                df_slopes[column],
                 marker=marker,
                 linestyle='-',
                 color=color,
