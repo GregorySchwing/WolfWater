@@ -943,14 +943,14 @@ process plot_grids {
             )
 
 
-        df[column].text(result_dict['ConvergedAlpha'], result_dict['ConvergedFAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
-        df[column].plot(result_dict['ConvergedAlpha'], result_dict['ConvergedFAlpha'], marker='*', markersize=20, linestyle='None', color='red')
+        axes[i].text(result_dict['ConvergedAlpha'], result_dict['ConvergedFAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
+        axes[i].plot(result_dict['ConvergedAlpha'], result_dict['ConvergedFAlpha'], marker='*', markersize=20, linestyle='None', color='red')
 
-        df_slopes[column].text(result_dict['ConvergedAlpha'], result_dict['ConvergedDFDAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
-        df_slopes[column].plot(result_dict['ConvergedAlpha'], result_dict['ConvergedDFDAlpha'], marker='*', markersize=20, linestyle='None', color='red')
+        axes_slopes[i].text(result_dict['ConvergedAlpha'], result_dict['ConvergedDFDAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
+        axes_slopes[i].plot(result_dict['ConvergedAlpha'], result_dict['ConvergedDFDAlpha'], marker='*', markersize=20, linestyle='None', color='red')
 
-        slopes_within_tol_df[column].text(result_dict['ConvergedFAlpha'], result_dict['ConvergedDFDAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
-        slopes_within_tol_df[column].plot(result_dict['ConvergedFAlpha'], result_dict['ConvergedDFDAlpha'], marker='*', markersize=20, linestyle='None', color='red')
+        axes_convergence[i].text(result_dict['ConvergedFAlpha'], result_dict['ConvergedDFDAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
+        axes_convergence[i].plot(result_dict['ConvergedFAlpha'], result_dict['ConvergedDFDAlpha'], marker='*', markersize=20, linestyle='None', color='red')
 
         # Set plot labels and title
         axes[i].set_xlabel('Alpha')
