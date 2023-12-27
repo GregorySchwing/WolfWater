@@ -795,6 +795,28 @@ process plot_grids {
     import matplotlib.pyplot as plt
     import re
     import numpy as np
+
+
+    # Function to get row, column index, and value closest to zero
+    def get_closest_to_zero_index_and_value(df):
+        # Calculate absolute differences from zero for each element in the DataFrame
+        absolute_diff = df.abs()
+
+        # Find the minimum absolute difference for each row
+        min_diff_per_row = absolute_diff.min(axis=1)
+
+        # Find the index of the minimum absolute difference for the entire DataFrame
+        closest_to_zero_row_index = min_diff_per_row.idxmin()
+
+        # Find the column index of the minimum absolute difference for the selected row
+        closest_to_zero_col_index = absolute_diff.loc[closest_to_zero_row_index].idxmin()
+
+        # Find the value corresponding to the closest-to-zero element
+        closest_to_zero_value = df.loc[closest_to_zero_row_index, closest_to_zero_col_index]
+
+        return closest_to_zero_row_index, closest_to_zero_col_index, closest_to_zero_value
+
+
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
         match = re.match(r'Wolf_Calibration_(\\w+)_BOX_\\d+_(\\w+).dat', file_name)
@@ -830,6 +852,9 @@ process plot_grids {
         'o', 's', '^', 'v', '<', '>', 'D', 'p', '*', 'h', '+', 'x', '|', '_',
         '.', ',', '1', '2', '3', '4', '8', 'H', 'd', 'D', 'P', 'X', 'o', 's', 'p', '*', 'h', '+', 'x'
     ]
+
+    model_dict = {}
+
     # Iterate over files and plot each DataFrame in a subplot
     for i, file_name in enumerate(file_list):
         random.seed(0)
@@ -839,8 +864,11 @@ process plot_grids {
         # Load the CSV file into a DataFrame
         df = pd.read_csv(file_name, index_col=0)
         df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
+
         desired_y_values = np.arange(-1, 1.1, 0.1)
         slopes_within_tol_df = pd.DataFrame(index=desired_y_values, columns=df.columns)
+        alphas_within_tol_df = pd.DataFrame(index=desired_y_values, columns=df.columns)
+
         for col in df.columns:
             x = df.index  # Using DataFrame indices as x-values
             y = df[col]
@@ -853,7 +881,26 @@ process plot_grids {
         for col in df.columns:
             # Interpolate to find the slope at the desired y-axis value
             slopes_within_tol_df[col] = np.interp(desired_y_values, df[col], df_slopes[col])
+            alphas_within_tol_df[col] = np.interp(desired_y_values, df[col], df.index)
 
+        result_row, result_col, result_value = get_closest_to_zero_index_and_value(slopes_within_tol_df)
+        converged_alpha = np.interp(result_row, alphas_within_tol_df.index,alphas_within_tol_df[result_col])
+
+        # Print the result
+        print("Converged RCut:", result_col)
+        print("Converged α:", converged_alpha)
+        print("Converged f(α):", result_row)
+        print("Converged d/dα f(α):", result_value)
+
+        # Create a dictionary with the information
+        result_dict = {
+            'ConvergedRCut': result_col,
+            'ConvergedAlpha': converged_alpha,  # Assuming column names are α
+            'ConvergedFAlpha': result_row,
+            'ConvergedDFDAlpha': result_value
+        }
+
+        model_dict[model_name]=result_dict
 
         # Plotting one line per row in the subplot
         #df.plot(ax=axes[i], marker='o', linestyle='-', legend=False)
@@ -894,6 +941,16 @@ process plot_grids {
                 fillstyle=fill_style,
                 legend=False
             )
+
+
+        df[column].text(result_dict['ConvergedAlpha'], result_dict['ConvergedFAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
+        df[column].plot(result_dict['ConvergedAlpha'], result_dict['ConvergedFAlpha'], marker='*', markersize=20, linestyle='None', color='red')
+
+        df_slopes[column].text(result_dict['ConvergedAlpha'], result_dict['ConvergedDFDAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
+        df_slopes[column].plot(result_dict['ConvergedAlpha'], result_dict['ConvergedDFDAlpha'], marker='*', markersize=20, linestyle='None', color='red')
+
+        slopes_within_tol_df[column].text(result_dict['ConvergedFAlpha'], result_dict['ConvergedDFDAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
+        slopes_within_tol_df[column].plot(result_dict['ConvergedFAlpha'], result_dict['ConvergedDFDAlpha'], marker='*', markersize=20, linestyle='None', color='red')
 
         # Set plot labels and title
         axes[i].set_xlabel('Alpha')
