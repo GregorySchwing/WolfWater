@@ -9,7 +9,8 @@ nextflow.enable.dsl=2
 // All of the default parameters are being set in `nextflow.config`
 
 // Import sub-workflows
-include { build_system } from './modules/system_builder'
+include { build_NVT_system } from './modules/system_builder'
+include { build_GEMC_system } from './modules/system_builder'
 include { train_model } from './modules/model_builder'
 include { predict_model } from './modules/model_builder'
 include { initialize_scikit_optimize_model } from './modules/scikit_optimize'
@@ -38,7 +39,6 @@ Optional Arguments:
 
     """.stripIndent()
 }
-
 
 // Main workflow
 workflow {
@@ -79,7 +79,7 @@ log.info """\
 
         // Create a channel with the CSV file
         csv_channel = channel.fromPath(input_csv)
-        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: -1,quote:'"').map { 
+        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 2,quote:'"').map { 
             row -> [row.temp_K, row.P_bar, row.No_mol, row.Rho_kg_per_m_cubed, row.L_m_if_cubed, row.RcutCoulomb]
         }
         //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
@@ -96,9 +96,26 @@ log.info """\
         jinja_channel = Channel.fromPath( [file(params.path_to_minimization_template),\
         file(params.path_to_nvt_template), file(params.path_to_npt_template)] ).collect()
         system_input = solventData.combine(solvent_xml_channel)     
-        build_system(system_input,jinja_channel)
+        build_NVT_system(system_input,jinja_channel)
+        
+        restartChannel = build_NVT_system.out.restart_files.groupTuple(by:0,size:2,remainder:false)
+        convergenceChannel = build_NVT_system.out.convergence.groupTuple(by:0,size:2,remainder:false)
+        // Flatten the charmmChannel into a list with some values and some paths
+        flattenedList = restartChannel.collect { tuple ->
+            def temperature = tuple[0]
+            def densities = tuple[1]
+            def statepointPaths = tuple[2]
+            def xscPaths = tuple[3]
+            def coorPaths = tuple[4]
+
+            // Customize this part based on your specific requirements
+            return [temperature, densities[0], densities[1], statepointPaths[0],statepointPaths[1], \
+            xscPaths[0], xscPaths[1], coorPaths[0], coorPaths[1]]
+        }
+        build_GEMC_system(flattenedList)
         return
-        skopt_model = initialize_scikit_optimize_model(build_system.out.system)
+
+        skopt_model = initialize_scikit_optimize_model(build_NVT_system.out.system)
         skopt_model.view()
         calibrate_wrapper(skopt_model)
     } else {

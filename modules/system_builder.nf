@@ -141,17 +141,17 @@ process build_solvent_system {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
     input:
     tuple val(temp_K), val(P_bar), val(No_mol), val(Rho_kg_per_m_cubed), val(L_m_if_cubed), val(RcutCoulomb), path(path_to_xml)
     output:
-    tuple val(Rho_kg_per_m_cubed),path("statepoint.json"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp"), emit: system
-    tuple val(Rho_kg_per_m_cubed), path("statepoint.json"), emit: statepoint
+    tuple val(temp_K), val(Rho_kg_per_m_cubed), path("statepoint.json"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp"), emit: system
+    tuple val(temp_K), val(Rho_kg_per_m_cubed), path("statepoint.json"), emit: statepoint
     //path("system_npt.conf"), emit: npt_conf
-    tuple val(Rho_kg_per_m_cubed), path("statepoint.json"), path("charmm.pkl"), emit: charmm
+    tuple val(temp_K), val(Rho_kg_per_m_cubed), path("charmm.pkl"), emit: charmm
 
     script:
     """
@@ -257,19 +257,46 @@ process build_solvent_system {
 }
 
 
+process build_two_box_system {
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: false
+    cpus 1
+
+    debug true
+    input:
+    tuple val(temp_K), val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), \
+    path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json"), \
+    path(xsc1, stageAs: "xsc1.xsc"), path(xsc2, stageAs: "xsc2.xsc"),\
+    path(coor1, stageAs: "coor1.coor"), path(coor2, stageAs: "coor2.coor")
+
+    output:
+
+    script:
+    """
+    #!/usr/bin/env python
+
+    print("hello from ", $temp_K, $Rho_kg_per_m_cubed1,$Rho_kg_per_m_cubed2)
+
+    """
+}
+
+
+
 process write_namd_confs {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/namd_input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path("statepoint.json"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp")
+    tuple val(temp_K), val(Rho_kg_per_m_cubed),path("statepoint.json"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp")
     tuple path(path_to_minimization_template), path(path_to_nvt_template), path(path_to_npt_template)
     output:
-    //tuple val(Rho_kg_per_m_cubed), path("statepoint.json"),path("system_nvt.conf"), path("system_npt.conf"), path("system.pdb"), path("system.psf"), path("system.inp"), emit: system
+    //tuple val(temp_K), val(Rho_kg_per_m_cubed),path("statepoint.json"),path("system_nvt.conf"), path("system_npt.conf"), path("system.pdb"), path("system.psf"), path("system.inp"), emit: system
     tuple path("namd_min.conf"), path("namd_nvt.conf"), path("namd_npt.conf"), emit: namd
 
     script:
@@ -385,14 +412,14 @@ process NAMD_equilibration_solvent_system {
     cache 'lenient'
     fair true
     container "${params.container__namd}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_npt_eq", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/namd_npt_eq", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
+    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
     tuple path(namd_minimization_conf), path(namd_nvt_conf), path(namd_npt_conf)
     output:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(pdb), path(psf), path(inp), path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: system
+    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(statepoint), path(pdb), path(psf), path(inp), path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: system
     tuple path("npt_equil.restart.xsc"), path("npt_equil.restart.coor"), emit: restart_files
     tuple path("minimization.log"), path("nvt_equil.log"), path("npt_equil.log"),  emit: record
     shell:
@@ -413,14 +440,14 @@ process NAMD_NVT_equilibration {
     cache 'lenient'
     fair true
     container "${params.container__namd}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/namd_nvt_eq", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/namd_nvt_eq", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
+    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
     tuple path(namd_minimization_conf), path(namd_nvt_conf), path(namd_npt_conf)
     output:
-    tuple path("nvt_equil.restart.xsc"), path("nvt_equil.restart.coor"), emit: restart_files
+    tuple val(temp_K), val(Rho_kg_per_m_cubed), path(statepoint), path("nvt_equil.restart.xsc"), path("nvt_equil.restart.coor"), emit: restart_files
     tuple path("minimization.log"), path("nvt_equil.log"), emit: record
     shell:
     """
@@ -438,11 +465,11 @@ process GOMC_NPT_equilibration {
     cache 'lenient'
     fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
+    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
     path(npt_conf)
     tuple path(restart_xsc), path(restart_coor)
     output:
@@ -462,13 +489,13 @@ process NVT_equilibration_solvent_system {
     cache 'lenient'
     fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_nvt_eq", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_nvt_eq", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint),path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp)
+    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(statepoint),path(nvt_conf), path(npt_conf), path(pdb), path(psf), path(inp)
     output:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
+    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
     path("system_nvt_restart.chk"),path("system_nvt_BOX_0_restart.coor"), path("system_nvt_BOX_0_restart.xsc"), emit: system
     tuple path("NVT_equilibration.log"), path(nvt_conf),  emit: record
 
@@ -486,12 +513,12 @@ process write_gomc_confs {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq_input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_npt_eq_input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(json), path(charmm)
+    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(json), path(charmm)
     tuple path(restart_xsc), path(restart_coor)
     output:
     path("system_npt.conf"), emit: npt_conf
@@ -597,14 +624,14 @@ process NPT_equilibration_solvent_system {
     cache 'lenient'
     fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_npt_eq", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
+    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
     path("system_nvt_restart.chk"),path("system_nvt_BOX_0_restart.coor"), path("system_nvt_BOX_0_restart.xsc")
     output:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
+    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(statepoint), path(npt_conf), path(pdb), path(psf), path(inp),\
     path("system_npt_restart.chk"),path("system_npt_BOX_0_restart.coor"), path("system_npt_BOX_0_restart.xsc"), emit: system
     tuple path("NPT_equilibration.log"), path(npt_conf),  emit: record
 
@@ -621,14 +648,14 @@ process write_gomc_calibration_confs {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(json), path(charmm)
+    tuple val(temp_K), val(Rho_kg_per_m_cubed), path(charmm)
     //tuple path(restart_xsc), path(restart_coor), path(restart_chk)
-    tuple path(restart_xsc), path(restart_coor)
+    tuple val(temp_K), val(Rho_kg_per_m_cubed), path(statepoint), path(restart_xsc), path(restart_coor)
     output:
     path("ewald_calibration.conf"), emit: ewald_calibration_conf
     script:
@@ -651,7 +678,7 @@ process write_gomc_calibration_confs {
             json_data = file.read()
             return Point.model_validate_json(json_data)
 
-    loaded_point = load_point_from_json("${json}")
+    loaded_point = load_point_from_json("${statepoint}")
 
     # GOMC Example for the NVT Ensemble using MoSDeF [1, 2, 5-10, 13-17]
 
@@ -727,7 +754,7 @@ process write_gomc_calibration_confs {
 
                                                                 }
                                         )
-    NUM_POINTS = 50.0
+    NUM_POINTS = 5.0
     RCC_START = 10.0
     RCC_END = int(liquid_box_length_Ang/2.0)
     #RCC_END = (liquid_box_length_Ang/2.0)*0.95
@@ -755,14 +782,14 @@ process GOMC_Ewald_Calibration {
     cache 'lenient'
     fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
+    tuple val(temp_K), val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
     path(ewald_calibration_conf)
     //tuple path(restart_xsc), path(restart_coor), path(restart_chk)
-    tuple path(restart_xsc), path(restart_coor)
+    tuple val(temp_K), val(Rho_kg_per_m_cubed), path(statepoint, stageAs: "copyOfStatepoint.json"), path(restart_xsc), path(restart_coor)
     output:
     path("Wolf_Calibration_*"), emit: grids
     path("Ewald_Calibration.log"),  emit: record
@@ -779,15 +806,17 @@ process plot_grids {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_plots", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_plots", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
     input:
-    tuple val(Rho_kg_per_m_cubed), path(json)
+    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(json)
     path(grids)
     output:
     tuple path("grids*.png"), path("limited_axes.png"), emit: figs
+    tuple val(temp_K), val(Rho_kg_per_m_cubed), path("convergence_obj.json"), emit: convergence
+    
     script:
     """
     #!/usr/bin/env python
@@ -983,11 +1012,33 @@ process plot_grids {
 
     # Show the plots
     plt.show()
+
+    from typing import Dict, Union
+    from pydantic import BaseModel, Field
+    import json
+
+    class InnerModel(BaseModel):
+        ConvergedRCut: float
+        ConvergedAlpha: float
+        ConvergedFAlpha: float
+        ConvergedDFDAlpha: float
+
+    class FooBarModel(BaseModel):
+        models: Dict[str, InnerModel]
+
+    # Create an instance of the model
+    convergence_obj = FooBarModel(
+        models=model_dict
+    )
+
+    # Serialize the Pydantic object to JSON
+    with open("convergence_obj.json", 'w') as file:
+        file.write(convergence_obj.model_dump_json())
     """
 }
 
 
-workflow build_system {
+workflow build_NVT_system {
     take:
     statepoint_and_solvent_xml
     jinja_channel
@@ -1004,6 +1055,18 @@ workflow build_system {
 
 
     emit:
+    restart_files = NAMD_NVT_equilibration.out.restart_files
     system = build_solvent_system.out.system
+    charmm = build_solvent_system.out.charmm
+    convergence = plot_grids.out.convergence
+
     
+}
+
+workflow build_GEMC_system {
+    take:
+    restartChannel
+    main:
+    build_two_box_system(restartChannel)
+
 }
