@@ -273,8 +273,9 @@ process build_two_box_system {
     path(path_to_xml)
 
     output:
-    tuple val(temp_K), path("in_GEMC_NVT.conf"), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
+    tuple val(temp_K), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
     path(xsc1),path(coor1),path(xsc2),path(coor2), emit: system
+    tuple val(temp_K), path(xsc1),path(coor1),path(xsc2),path(coor2), emit: restart_files
     tuple val(temp_K), path("charmm.pkl"), emit: charmm
 
     script:
@@ -1168,6 +1169,93 @@ process plot_grids {
     """
 }
 
+
+process write_gemc_production_confs {
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/gemc_confs", mode: 'copy', overwrite: false
+    cpus 1
+
+    debug true
+    input:
+    tuple val(temp_K), path(charmm)
+    tuple val(temp_K), val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), path(convergenceJSON1, stageAs: "convergenceJSON1.json"), path(convergenceJSON2, stageAs: "convergenceJSON2.json")
+    tuple val(temp_K), path(xsc1), path(coor1), path(xsc2), path(coor2) 
+
+    output:
+    path("in_GEMC_NVT.conf")
+
+    script:
+    """
+    #!/usr/bin/env python
+    from typing import List
+    from pydantic import BaseModel
+    print("hello from ", $temp_K, $Rho_kg_per_m_cubed1,$Rho_kg_per_m_cubed2, "$convergenceJSON1","$convergenceJSON2")
+
+    from typing import Dict, Union
+    from pydantic import BaseModel, Field
+    import json
+
+    class InnerModel(BaseModel):
+        ConvergedRCut: float
+        ConvergedAlpha: float
+        ConvergedFAlpha: float
+        ConvergedDFDAlpha: float
+
+    class FooBarModel(BaseModel):
+        models: Dict[str, InnerModel]
+
+
+    # Function to load Pydantic objects from JSON file
+    def load_point_from_json(file_path: str) -> FooBarModel:
+        with open(file_path, 'r') as file:
+            json_data = file.read()
+            return FooBarModel.model_validate_json(json_data)
+    
+    loaded_point1 = load_point_from_json("${convergenceJSON1}")
+    loaded_point2 = load_point_from_json("${convergenceJSON2}")
+    print(loaded_point1)
+    print(loaded_point2)
+
+    import pickle
+    # Unpickling the object
+    with open("${charmm}", 'rb') as file:
+        charmm = pickle.load(file)
+
+
+    import mbuild as mb
+    import unyt as u
+    from mosdef_gomc.formats import charmm_writer as mf_charmm
+    from mosdef_gomc.formats.charmm_writer import Charmm
+    import mosdef_gomc.formats.gomc_conf_writer as gomc_control
+    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT.conf', 'GEMC_NVT', 100, 500,
+                                        Restart=True,
+                                        check_input_files_exist=False,
+                                        binCoordinates_box_0="${coor1}",
+                                        extendedSystem_box_0="${xsc1}",
+                                        binCoordinates_box_1="${coor2}",
+                                        extendedSystem_box_1="${xsc2}",
+                                        input_variables_dict={"VDWGeometricSigma": True,
+                                                            "Rcut": 12,
+                                                            #"RcutCoulomb_box_0": loaded_point1.rcut_couloumb,
+                                                            #"RcutCoulomb_box_1": loaded_point2.rcut_couloumb,
+                                                            "DisFreq": 0.20,
+                                                            "RotFreq": 0.20, 
+                                                            "IntraSwapFreq": 0.10,
+                                                            "SwapFreq": 0.20,
+                                                            "RegrowthFreq": 0.20,
+                                                            "CrankShaftFreq": 0.09,
+                                                            "VolFreq": 0.01,
+                                                            "MultiParticleFreq": 0.00,
+                                                            "OutputName":"GOMC_GEMC_Production"
+                                                            }
+                                        )
+    """
+}
+
+
+
 process GOMC_GEMC_Production {
     cache 'lenient'
     fair true
@@ -1218,8 +1306,9 @@ workflow build_NVT_system {
 workflow build_GEMC_system {
     take:
     restartChannel
+    convergenceChannel
     main:
     build_two_box_system(restartChannel)
-    build_two_box_system.out.system.view()
-    GOMC_GEMC_Production(build_two_box_system.out.system)
+    write_gemc_production_confs(build_two_box_system.out.charmm,convergenceChannel,build_two_box_system.out.restart_files)
+    //GOMC_GEMC_Production(build_two_box_system.out.system)
 }
