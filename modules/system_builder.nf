@@ -261,7 +261,7 @@ process build_two_box_system {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/input", mode: 'copy', overwrite: false
     cpus 1
 
     debug true
@@ -269,16 +269,147 @@ process build_two_box_system {
     tuple val(temp_K), val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), \
     path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json"), \
     path(xsc1, stageAs: "xsc1.xsc"), path(xsc2, stageAs: "xsc2.xsc"),\
-    path(coor1, stageAs: "coor1.coor"), path(coor2, stageAs: "coor2.coor")
+    path(coor1, stageAs: "coor1.coor"), path(coor2, stageAs: "coor2.coor"),\
+    path(path_to_xml)
 
     output:
+    tuple val(temp_K), path("in_GEMC_NVT.conf"), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
+    path(xsc1),path(coor1),path(xsc2),path(coor2), emit: system
+    tuple val(temp_K), path("charmm.pkl"), emit: charmm
 
     script:
     """
     #!/usr/bin/env python
-
+    from typing import List
+    from pydantic import BaseModel
     print("hello from ", $temp_K, $Rho_kg_per_m_cubed1,$Rho_kg_per_m_cubed2)
 
+    class Point(BaseModel):
+        density: float
+        temperature: float
+        pressure: float
+        no_mol: float
+        box_length: float
+        rcut_couloumb: float
+
+    # Function to load Pydantic objects from JSON file
+    def load_point_from_json(file_path: str) -> Point:
+        with open(file_path, 'r') as file:
+            json_data = file.read()
+            return Point.model_validate_json(json_data)
+
+    loaded_point1 = load_point_from_json("$statepoint1")
+    print("Loaded point1")
+    print(loaded_point1)
+    loaded_point2 = load_point_from_json("$statepoint2")
+    print("Loaded point2")
+    print(loaded_point2)
+
+    # GOMC Example for the NVT Ensemble using MoSDeF [1, 2, 5-10, 13-17]
+
+    # Import the required packages and specify the force field (FF),
+    # box dimensions, density, and mol ratios [1, 2, 5-10, 13-17].
+
+    import mbuild as mb
+    import unyt as u
+    from mosdef_gomc.formats import charmm_writer as mf_charmm
+    from mosdef_gomc.formats.charmm_writer import Charmm
+    import mosdef_gomc.formats.gomc_conf_writer as gomc_control
+    
+    from   mbuild.lib.molecules.water import WaterSPC
+    import foyer
+
+    forcefield_file_water = "${path_to_xml}"
+
+    liquid_box_length_Ang = loaded_point1.box_length
+
+    liquid_box_density_kg_per_m_cubed = loaded_point1.density
+
+    temperature = loaded_point1.temperature
+    
+    pressure=loaded_point1.pressure
+
+    water = WaterSPC()
+    water.name = 'SPCE'
+
+    molecule_list = [water]
+    residues_list = [water.name]
+    fixed_bonds_angles_list = [water.name]
+
+    ## Build the main liquid simulation box (box 0) for the simulation [1, 2, 13-17]
+
+    liquid_water_box = mb.fill_box(compound=molecule_list,
+                                        n_compounds=int(loaded_point1.no_mol),
+                                        box=[liquid_box_length_Ang / 10,
+                                            liquid_box_length_Ang / 10,
+                                            liquid_box_length_Ang / 10]
+                                        )
+
+    vapor_box_length_Ang = loaded_point2.box_length
+
+    vapor_box_density_kg_per_m_cubed = loaded_point2.density
+
+    temperature = loaded_point1.temperature
+    
+    pressure=loaded_point1.pressure
+
+    vapor_water_box = mb.fill_box(compound=molecule_list,
+                                        n_compounds=int(loaded_point2.no_mol),
+                                        box=[vapor_box_length_Ang / 10,
+                                            vapor_box_length_Ang / 10,
+                                            vapor_box_length_Ang / 10]
+                                        )
+
+    # Destroys water angles!!! Since GOMC is rigid water, dont use this.
+    #water_box.energy_minimize(forcefield=forcefield_file_water , steps=10**5 )
+    # Build the Charmm object, which is required to write the
+    # FF (.inp), psf, pdb, and GOMC control files [1, 2, 5-10, 13-17]
+
+    charmm = mf_charmm.Charmm(liquid_water_box,
+                            'system_liq',
+                            structure_box_1=vapor_water_box,
+                            filename_box_1='system_vap',
+                            ff_filename="system",
+                            forcefield_selection=forcefield_file_water,
+                            residues= residues_list,
+                            gomc_fix_bonds_angles=fixed_bonds_angles_list
+                            )
+
+
+    import pickle
+    # Unpickling the object
+    with open("charmm.pkl", 'wb') as file:
+         pickle.dump(charmm, file)
+
+    charmm.write_inp()
+
+    charmm.write_psf()
+
+    charmm.write_pdb()
+
+
+    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT.conf', 'GEMC_NVT', 100, loaded_point1.temperature,
+                                        Restart=True,
+                                        check_input_files_exist=False,
+                                        binCoordinates_box_0="${coor1}",
+                                        extendedSystem_box_0="${xsc1}",
+                                        binCoordinates_box_1="${coor2}",
+                                        extendedSystem_box_1="${xsc2}",
+                                        input_variables_dict={"VDWGeometricSigma": True,
+                                                            "Rcut": 12,
+                                                            "RcutCoulomb_box_0": loaded_point1.rcut_couloumb,
+                                                            "RcutCoulomb_box_1": loaded_point2.rcut_couloumb,
+                                                            "DisFreq": 0.20,
+                                                            "RotFreq": 0.20, 
+                                                            "IntraSwapFreq": 0.10,
+                                                            "SwapFreq": 0.20,
+                                                            "RegrowthFreq": 0.20,
+                                                            "CrankShaftFreq": 0.09,
+                                                            "VolFreq": 0.01,
+                                                            "MultiParticleFreq": 0.00,
+                                                            "OutputName":"GOMC_GEMC_Production"
+                                                            }
+                                        )
     """
 }
 
@@ -1037,6 +1168,27 @@ process plot_grids {
     """
 }
 
+process GOMC_GEMC_Production {
+    cache 'lenient'
+    fair true
+    container "${params.container__gomc}"
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/gomc_gemc_production", mode: 'copy', overwrite: false
+    cpus 8
+    debug false
+    input:
+    tuple val(temp_K), path(gemc_conf), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp),\
+    path(xsc1),path(coor1),path(xsc2),path(coor2)
+    output:
+    path("GOMC_GEMC_Production*"), emit: grids
+    path("GOMC_GEMC_Production.log"),  emit: record
+    shell:
+    """
+    
+    #!/bin/bash
+    cat ${gemc_conf} > local.conf
+    GOMC_CPU_GEMC +p${task.cpus} local.conf > GOMC_GEMC_Production.log
+    """
+}
 
 workflow build_NVT_system {
     take:
@@ -1068,5 +1220,6 @@ workflow build_GEMC_system {
     restartChannel
     main:
     build_two_box_system(restartChannel)
-
+    build_two_box_system.out.system.view()
+    GOMC_GEMC_Production(build_two_box_system.out.system)
 }

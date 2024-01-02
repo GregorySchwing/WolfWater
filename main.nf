@@ -112,7 +112,8 @@ log.info """\
             return [temperature, densities[0], densities[1], statepointPaths[0],statepointPaths[1], \
             xscPaths[0], xscPaths[1], coorPaths[0], coorPaths[1]]
         }
-        build_GEMC_system(flattenedList)
+        gemc_system_input = flattenedList.combine(solvent_xml_channel)     
+        build_GEMC_system(gemc_system_input)
         return
 
         skopt_model = initialize_scikit_optimize_model(build_NVT_system.out.system)
