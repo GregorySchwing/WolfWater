@@ -1237,9 +1237,12 @@ process write_gemc_production_confs {
                                         binCoordinates_box_1="${coor2}",
                                         extendedSystem_box_1="${xsc2}",
                                         input_variables_dict={"VDWGeometricSigma": True,
+                                                            "Ewald": False,
+                                                            "PRNG": int(0),
                                                             "Rcut": 12,
-                                                            #"RcutCoulomb_box_0": loaded_point1.rcut_couloumb,
-                                                            #"RcutCoulomb_box_1": loaded_point2.rcut_couloumb,
+                                                            "RcutLow": 1,
+                                                            "RcutCoulomb_box_0": loaded_point1.models["${METHOD}"].ConvergedRCut,
+                                                            "RcutCoulomb_box_1": loaded_point2.models["${METHOD}"].ConvergedRCut,
                                                             "DisFreq": 0.20,
                                                             "RotFreq": 0.20, 
                                                             "IntraSwapFreq": 0.10,
@@ -1251,6 +1254,21 @@ process write_gemc_production_confs {
                                                             "OutputName":"GOMC_GEMC_Production"
                                                             }
                                         )
+
+    kind_pot = "${METHOD}".split('_')
+
+    file1 = open("in_GEMC_NVT.conf", "a")
+    defAlphaLine = "{box}\\t{val}\\n".format(box="Wolf", val="True")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfKind", val=kind_pot[0])
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfPotential", val=kind_pot[1])
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=loaded_point1.models["${METHOD}"].ConvergedAlpha)
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="1", val=loaded_point2.models["${METHOD}"].ConvergedAlpha)
+    file1.writelines(defAlphaLine)
+
     """
 }
 
