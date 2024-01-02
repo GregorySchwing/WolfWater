@@ -1174,7 +1174,7 @@ process write_gemc_production_confs {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/methods/$METHOD", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/methods/${METHOD}/input", mode: 'copy', overwrite: false
     cpus 1
 
     debug true
@@ -1184,7 +1184,7 @@ process write_gemc_production_confs {
     val(METHOD)
 
     output:
-    path("in_GEMC_NVT.conf")
+    tuple val(temp_K), val(METHOD),path("in_GEMC_NVT.conf"),emit:gemc_conf
 
     script:
     """
@@ -1260,12 +1260,13 @@ process GOMC_GEMC_Production {
     cache 'lenient'
     fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/gomc_gemc_production", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/methods/${METHOD}/production", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
-    tuple val(temp_K), path(gemc_conf), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp),\
+    tuple val(temp_K), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp),\
     path(xsc1),path(coor1),path(xsc2),path(coor2)
+    tuple val(temp_K), val(METHOD),path(gemc_conf)
     output:
     path("GOMC_GEMC_Production*"), emit: grids
     path("GOMC_GEMC_Production.log"),  emit: record
@@ -1314,5 +1315,5 @@ workflow build_GEMC_system {
     combinedChannel=joinedChannel.combine(methods)
     combinedChannel.view()
     write_gemc_production_confs(combinedChannel)
-    //GOMC_GEMC_Production(build_two_box_system.out.system)
+    GOMC_GEMC_Production(build_two_box_system.out.system,write_gemc_production_confs.out.gemc_conf)
 }
