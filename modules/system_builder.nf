@@ -144,7 +144,7 @@ process build_solvent_system {
     publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: false
     cpus 1
 
-    debug false
+    debug true
     input:
     tuple val(temp_K), val(P_bar), val(No_mol), val(Rho_kg_per_m_cubed), val(L_m_if_cubed), val(RcutCoulomb), path(path_to_xml)
     output:
