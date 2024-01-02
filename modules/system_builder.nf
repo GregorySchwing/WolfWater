@@ -264,7 +264,7 @@ process build_two_box_system {
     publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/input", mode: 'copy', overwrite: false
     cpus 1
 
-    debug true
+    debug false
     input:
     tuple val(temp_K), val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), \
     path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json"), \
@@ -276,7 +276,7 @@ process build_two_box_system {
     tuple val(temp_K), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
     path(xsc1),path(coor1),path(xsc2),path(coor2), emit: system
     tuple val(temp_K), path(xsc1),path(coor1),path(xsc2),path(coor2), emit: restart_files
-    tuple val(temp_K), path("charmm.pkl"), emit: charmm
+    tuple val(temp_K), path("charmm.pkl"), path(xsc1),path(coor1),path(xsc2),path(coor2), emit: charmm
 
     script:
     """
@@ -1174,14 +1174,14 @@ process write_gemc_production_confs {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/gemc_confs", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/methods/$METHOD", mode: 'copy', overwrite: false
     cpus 1
 
     debug true
     input:
-    tuple val(temp_K), path(charmm)
-    tuple val(temp_K), val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), path(convergenceJSON1, stageAs: "convergenceJSON1.json"), path(convergenceJSON2, stageAs: "convergenceJSON2.json")
-    tuple val(temp_K), path(xsc1), path(coor1), path(xsc2), path(coor2) 
+    tuple val(temp_K), path(charmm),path(xsc1), path(coor1), path(xsc2), path(coor2),\
+    val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), path(convergenceJSON1, stageAs: "convergenceJSON1.json"), path(convergenceJSON2, stageAs: "convergenceJSON2.json"),\
+    val(METHOD)
 
     output:
     path("in_GEMC_NVT.conf")
@@ -1191,7 +1191,7 @@ process write_gemc_production_confs {
     #!/usr/bin/env python
     from typing import List
     from pydantic import BaseModel
-    print("hello from ", $temp_K, $Rho_kg_per_m_cubed1,$Rho_kg_per_m_cubed2, "$convergenceJSON1","$convergenceJSON2")
+    print("hello from ", $temp_K, $Rho_kg_per_m_cubed1,$Rho_kg_per_m_cubed2, "$convergenceJSON1","$convergenceJSON2", "$METHOD" )
 
     from typing import Dict, Union
     from pydantic import BaseModel, Field
@@ -1309,6 +1309,10 @@ workflow build_GEMC_system {
     convergenceChannel
     main:
     build_two_box_system(restartChannel)
-    write_gemc_production_confs(build_two_box_system.out.charmm,convergenceChannel,build_two_box_system.out.restart_files)
+    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
+    joinedChannel = build_two_box_system.out.charmm.join(convergenceChannel,by:0)
+    combinedChannel=joinedChannel.combine(methods)
+    combinedChannel.view()
+    write_gemc_production_confs(combinedChannel)
     //GOMC_GEMC_Production(build_two_box_system.out.system)
 }
