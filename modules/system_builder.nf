@@ -388,29 +388,6 @@ process build_two_box_system {
 
     charmm.write_pdb()
 
-
-    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT.conf', 'GEMC_NVT', 100, loaded_point1.temperature,
-                                        Restart=True,
-                                        check_input_files_exist=False,
-                                        binCoordinates_box_0="${coor1}",
-                                        extendedSystem_box_0="${xsc1}",
-                                        binCoordinates_box_1="${coor2}",
-                                        extendedSystem_box_1="${xsc2}",
-                                        input_variables_dict={"VDWGeometricSigma": True,
-                                                            "Rcut": 12,
-                                                            "RcutCoulomb_box_0": loaded_point1.rcut_couloumb,
-                                                            "RcutCoulomb_box_1": loaded_point2.rcut_couloumb,
-                                                            "DisFreq": 0.20,
-                                                            "RotFreq": 0.20, 
-                                                            "IntraSwapFreq": 0.10,
-                                                            "SwapFreq": 0.20,
-                                                            "RegrowthFreq": 0.20,
-                                                            "CrankShaftFreq": 0.09,
-                                                            "VolFreq": 0.01,
-                                                            "MultiParticleFreq": 0.00,
-                                                            "OutputName":"GOMC_GEMC_Production"
-                                                            }
-                                        )
     """
 }
 
@@ -1229,29 +1206,96 @@ process write_gemc_production_confs {
     from mosdef_gomc.formats import charmm_writer as mf_charmm
     from mosdef_gomc.formats.charmm_writer import Charmm
     import mosdef_gomc.formats.gomc_conf_writer as gomc_control
-    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT.conf', 'GEMC_NVT', 100, 500,
+
+    # calc MC steps for gomc equilb
+    # number of simulation steps
+    gomc_steps_equilibration = 100000000 #  set value for paper = 60 * 10**6
+    gomc_steps_production = 100000000 # set value for paper = 60 * 10**6
+    console_output_freq = 10000 # Monte Carlo Steps between console output
+    pressure_calc_freq = 1000 # Monte Carlo Steps for pressure calculation
+    block_ave_output_freq = 10000000 # Monte Carlo Steps between console output
+    coordinate_output_freq = 10000000 # # set value for paper = 50 * 10**3
+    EqSteps = 100000 # MCS for equilibration
+    AdjSteps = 1000 #MCS for adjusting max displacement, rotation, volume, etc.
+
+    MC_steps = int(gomc_steps_equilibration)
+    # cutoff and tail correction
+    Rcut_ang = 12 * u.angstrom
+    Rcut_low_ang = 1.0 * u.angstrom
+    LRC = True
+    Exclude = "1-4"
+    RcutCoulomb_box_0=loaded_point1.models["${METHOD}"].ConvergedRCut
+    RcutCoulomb_box_1=loaded_point2.models["${METHOD}"].ConvergedRCut
+
+    # MC move ratios
+    DisFreq = 0.34
+    RotFreq = 0.34
+    VolFreq = 0.01
+    MultiParticleFreq=0.01
+    RegrowthFreq = 0.10
+    IntraSwapFreq = 0.00
+    IntraMEMC_2Freq = 0.00
+    CrankShaftFreq = 0.00
+    SwapFreq = 0.20
+    MEMC_2Freq = 0.0
+
+    gomc_output_data_every_X_steps = 50 * 10**3 # # set value for paper = 50 * 10**3
+    # output all data and calc frequecy
+    output_true_list_input = [
+        True,
+        int(gomc_output_data_every_X_steps),
+    ]
+    output_false_list_input = [
+        False,
+        int(gomc_output_data_every_X_steps),
+    ]
+    output_file_prefix="GOMC_GEMC_Production"
+
+
+    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT.conf', 'GEMC_NVT', MC_steps, ${temp_K},
                                         Restart=True,
                                         check_input_files_exist=False,
                                         binCoordinates_box_0="${coor1}",
                                         extendedSystem_box_0="${xsc1}",
                                         binCoordinates_box_1="${coor2}",
                                         extendedSystem_box_1="${xsc2}",
-                                        input_variables_dict={"VDWGeometricSigma": True,
+                                        input_variables_dict={"VDWGeometricSigma": False,
                                                             "Ewald": False,
+                                                            "ElectroStatic": True,
                                                             "PRNG": int(0),
+                                                            "Pressure": None,
+                                                            "Potential": "VDW",
+                                                            "LRC": LRC,
                                                             "Rcut": 12,
                                                             "RcutLow": 1,
-                                                            "RcutCoulomb_box_0": loaded_point1.models["${METHOD}"].ConvergedRCut,
-                                                            "RcutCoulomb_box_1": loaded_point2.models["${METHOD}"].ConvergedRCut,
-                                                            "DisFreq": 0.20,
-                                                            "RotFreq": 0.20, 
-                                                            "IntraSwapFreq": 0.10,
-                                                            "SwapFreq": 0.20,
-                                                            "RegrowthFreq": 0.20,
-                                                            "CrankShaftFreq": 0.09,
-                                                            "VolFreq": 0.01,
-                                                            "MultiParticleFreq": 0.00,
-                                                            "OutputName":"GOMC_GEMC_Production"
+                                                            "RcutCoulomb_box_0": RcutCoulomb_box_0,
+                                                            "RcutCoulomb_box_1": RcutCoulomb_box_1,
+                                                            "Exclude": Exclude,
+                                                            "DisFreq": DisFreq,
+                                                            "VolFreq": VolFreq,
+                                                            "RotFreq": RotFreq,
+                                                            "MultiParticleFreq": MultiParticleFreq,
+                                                            "RegrowthFreq": RegrowthFreq,
+                                                            "IntraSwapFreq": IntraSwapFreq,
+                                                            "IntraMEMC-2Freq": IntraMEMC_2Freq,
+                                                            "CrankShaftFreq": CrankShaftFreq,
+                                                            "SwapFreq": SwapFreq,
+                                                            "MEMC-2Freq": MEMC_2Freq,
+                                                            "OutputName": output_file_prefix,
+                                                            "EqSteps": EqSteps,
+                                                            "AdjSteps":AdjSteps,
+                                                            "PressureCalc": [True, pressure_calc_freq],
+                                                            "RestartFreq": [True, coordinate_output_freq],
+                                                            "CheckpointFreq": [True, coordinate_output_freq],
+                                                            "DCDFreq": [True, coordinate_output_freq],
+                                                            "ConsoleFreq": [True, console_output_freq],
+                                                            "BlockAverageFreq":[True, block_ave_output_freq],
+                                                            "HistogramFreq": output_false_list_input,
+                                                            "CoordinatesFreq": output_false_list_input,
+                                                            "CBMC_First": 12,
+                                                            "CBMC_Nth": 10,
+                                                            "CBMC_Ang": 50,
+                                                            "CBMC_Dih": 50,
                                                             }
                                         )
 
@@ -1331,7 +1375,6 @@ workflow build_GEMC_system {
     methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
     joinedChannel = build_two_box_system.out.charmm.join(convergenceChannel,by:0)
     combinedChannel=joinedChannel.combine(methods)
-    combinedChannel.view()
     write_gemc_production_confs(combinedChannel)
     GOMC_GEMC_Production(build_two_box_system.out.system,write_gemc_production_confs.out.gemc_conf)
 }
