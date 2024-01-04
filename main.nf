@@ -96,31 +96,21 @@ log.info """\
         jinja_channel = Channel.fromPath( [file(params.path_to_minimization_template),\
         file(params.path_to_nvt_template), file(params.path_to_npt_template)] ).collect()
         system_input = solventData.combine(solvent_xml_channel)     
-        build_NVT_system(system_input,jinja_channel)
-        
-        restartChannel = build_NVT_system.out.restart_files.groupTuple(by:0,size:2,remainder:false)
+        build_NVT_system(system_input,jinja_channel)        
         convergenceChannel = build_NVT_system.out.convergence.groupTuple(by:0,size:2,remainder:false)
-        // Flatten the charmmChannel into a list with some values and some paths
-        flattenedList = restartChannel.map { tuple ->
-            def temperature = tuple[0]
-            def densities = tuple[1]
-            def statepointPaths = tuple[2]
-            def xscPaths = tuple[3]
-            def coorPaths = tuple[4]
-
-            // Customize this part based on your specific requirements
-            return [temperature, densities[0], densities[1], statepointPaths[0],statepointPaths[1], \
-            xscPaths[0], xscPaths[1], coorPaths[0], coorPaths[1]]
-        }
         convergenceChannelFlattened = convergenceChannel.map { tuple ->
             def temperature = tuple[0]
             def densities = tuple[1]
             def statepointPaths = tuple[2]
+            def convergenceJson = tuple[3]
+            def xscPaths = tuple[4]
+            def coorPaths = tuple[5]
             // Customize this part based on your specific requirements
-            return [temperature, densities[0], densities[1], statepointPaths[0],statepointPaths[1]]
+            return [temperature, densities[0], densities[1], statepointPaths[0],statepointPaths[1], \
+            convergenceJson[0],convergenceJson[1], xscPaths[0], xscPaths[1], coorPaths[0], coorPaths[1]]
         }
-        gemc_system_input = flattenedList.combine(solvent_xml_channel)   
-        build_GEMC_system(gemc_system_input,convergenceChannelFlattened)
+        gemc_system_input = convergenceChannelFlattened.combine(solvent_xml_channel)   
+        build_GEMC_system(gemc_system_input)
         return
 
         skopt_model = initialize_scikit_optimize_model(build_NVT_system.out.system)

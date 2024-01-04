@@ -144,14 +144,14 @@ process build_solvent_system {
     publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: false
     cpus 1
 
-    debug true
+    debug false
     input:
     tuple val(temp_K), val(P_bar), val(No_mol), val(Rho_kg_per_m_cubed), val(L_m_if_cubed), val(RcutCoulomb), path(path_to_xml)
     output:
-    tuple val(temp_K), val(Rho_kg_per_m_cubed), path("statepoint.json"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp"), emit: system
-    tuple val(temp_K), val(Rho_kg_per_m_cubed), path("statepoint.json"), emit: statepoint
+    tuple val(Rho_kg_per_m_cubed), val(temp_K), path("statepoint.json"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp"), emit: system
+    tuple val(Rho_kg_per_m_cubed), val(temp_K), path("statepoint.json"), emit: statepoint
     //path("system_npt.conf"), emit: npt_conf
-    tuple val(temp_K), val(Rho_kg_per_m_cubed), path("charmm.pkl"), emit: charmm
+    tuple val(Rho_kg_per_m_cubed), val(temp_K), path("charmm.pkl"), emit: charmm
 
     script:
     """
@@ -268,6 +268,7 @@ process build_two_box_system {
     input:
     tuple val(temp_K), val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), \
     path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json"), \
+    path(convergence_obj1, stageAs: "convergence_obj1.json"), path(convergence_obj2, stageAs: "convergence_obj2.json"), \
     path(xsc1, stageAs: "xsc1.xsc"), path(xsc2, stageAs: "xsc2.xsc"),\
     path(coor1, stageAs: "coor1.coor"), path(coor2, stageAs: "coor2.coor"),\
     path(path_to_xml)
@@ -276,7 +277,7 @@ process build_two_box_system {
     tuple val(temp_K), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
     path(xsc1),path(coor1),path(xsc2),path(coor2), emit: system
     tuple val(temp_K), path(xsc1),path(coor1),path(xsc2),path(coor2), emit: restart_files
-    tuple val(temp_K), path("charmm.pkl"), path(xsc1),path(coor1),path(xsc2),path(coor2), emit: charmm
+    tuple val(temp_K), path("charmm.pkl"), path(xsc1),path(coor1),path(xsc2),path(coor2),path(convergence_obj1),path(convergence_obj2), emit: charmm
 
     script:
     """
@@ -402,11 +403,11 @@ process write_namd_confs {
 
     debug false
     input:
-    tuple val(temp_K), val(Rho_kg_per_m_cubed),path("statepoint.json"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp")
+    tuple val(Rho_kg_per_m_cubed), val(temp_K), path("statepoint.json"), path("system.pdb"), path("system.psf"), path("system.inp"), path("namd_system.inp")
     tuple path(path_to_minimization_template), path(path_to_nvt_template), path(path_to_npt_template)
     output:
     //tuple val(temp_K), val(Rho_kg_per_m_cubed),path("statepoint.json"),path("system_nvt.conf"), path("system_npt.conf"), path("system.pdb"), path("system.psf"), path("system.inp"), emit: system
-    tuple path("namd_min.conf"), path("namd_nvt.conf"), path("namd_npt.conf"), emit: namd
+    tuple val(Rho_kg_per_m_cubed), val(temp_K), path("namd_min.conf"), path("namd_nvt.conf"), path("namd_npt.conf"), emit: namd
 
     script:
     """
@@ -553,10 +554,9 @@ process NAMD_NVT_equilibration {
     cpus 8
     debug false
     input:
-    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
-    tuple path(namd_minimization_conf), path(namd_nvt_conf), path(namd_npt_conf)
+    tuple val(Rho_kg_per_m_cubed),val(temp_K),path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp),val(temp_K),path(namd_minimization_conf), path(namd_nvt_conf), path(namd_npt_conf)
     output:
-    tuple val(temp_K), val(Rho_kg_per_m_cubed), path(statepoint), path("nvt_equil.restart.xsc"), path("nvt_equil.restart.coor"), emit: restart_files
+    tuple val(Rho_kg_per_m_cubed), val(temp_K), path(statepoint), path("nvt_equil.restart.xsc"), path("nvt_equil.restart.coor"), emit: restart_files
     tuple path("minimization.log"), path("nvt_equil.log"), emit: record
     shell:
     """
@@ -762,11 +762,9 @@ process write_gomc_calibration_confs {
 
     debug false
     input:
-    tuple val(temp_K), val(Rho_kg_per_m_cubed), path(charmm)
-    //tuple path(restart_xsc), path(restart_coor), path(restart_chk)
-    tuple val(temp_K), val(Rho_kg_per_m_cubed), path(statepoint), path(restart_xsc), path(restart_coor)
+    tuple val(Rho_kg_per_m_cubed),val(temp_K),path(charmm),val(temp_K),path(statepoint),path(restart_xsc),path(restart_coor)
     output:
-    path("ewald_calibration.conf"), emit: ewald_calibration_conf
+    tuple val(Rho_kg_per_m_cubed),val(temp_K),path("ewald_calibration.conf"), emit: ewald_calibration_conf
     script:
     """
     #!/usr/bin/env python
@@ -895,12 +893,12 @@ process GOMC_Ewald_Calibration {
     cpus 8
     debug false
     input:
-    tuple val(temp_K), val(Rho_kg_per_m_cubed), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp)
-    path(ewald_calibration_conf)
-    //tuple path(restart_xsc), path(restart_coor), path(restart_chk)
-    tuple val(temp_K), val(Rho_kg_per_m_cubed), path(statepoint, stageAs: "copyOfStatepoint.json"), path(restart_xsc), path(restart_coor)
+    tuple val(Rho_kg_per_m_cubed), val(temp_K), path(statepoint),path(pdb), path(psf), path(inp), path(namd_inp),\
+    val(temp_K), path(statepoint, stageAs: "copyOfStatepoint.json"), path(restart_xsc), path(restart_coor),\
+    val(temp_K), path(ewald_calibration_conf)
+    
     output:
-    path("Wolf_Calibration_*"), emit: grids
+    tuple val(Rho_kg_per_m_cubed), val(temp_K), path("Wolf_Calibration_*"), emit: grids
     path("Ewald_Calibration.log"),  emit: record
     shell:
     """
@@ -920,11 +918,10 @@ process plot_grids {
 
     debug false
     input:
-    tuple val(temp_K), val(Rho_kg_per_m_cubed),path(json)
-    path(grids)
+    tuple val(Rho_kg_per_m_cubed), val(temp_K), path(statepoint, stageAs: "copyOfStatepoint.json"), path(restart_xsc), path(restart_coor),val(temp_K), path(grids)
     output:
     tuple path("grids*.png"), path("limited_axes.png"), emit: figs
-    tuple val(temp_K), val(Rho_kg_per_m_cubed), path("convergence_obj.json"), emit: convergence
+    tuple val(temp_K), val(Rho_kg_per_m_cubed), path(statepoint), path("convergence_obj.json"), path(restart_xsc), path(restart_coor), emit: convergence
     
     script:
     """
@@ -1154,10 +1151,10 @@ process write_gemc_production_confs {
     publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/methods/${METHOD}/input", mode: 'copy', overwrite: false
     cpus 1
 
-    debug true
+    debug false
     input:
     tuple val(temp_K), path(charmm),path(xsc1), path(coor1), path(xsc2), path(coor2),\
-    val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), path(convergenceJSON1, stageAs: "convergenceJSON1.json"), path(convergenceJSON2, stageAs: "convergenceJSON2.json"),\
+    path(convergenceJSON1, stageAs: "convergenceJSON1.json"), path(convergenceJSON2, stageAs: "convergenceJSON2.json"),\
     val(METHOD)
 
     output:
@@ -1168,7 +1165,7 @@ process write_gemc_production_confs {
     #!/usr/bin/env python
     from typing import List
     from pydantic import BaseModel
-    print("hello from ", $temp_K, $Rho_kg_per_m_cubed1,$Rho_kg_per_m_cubed2, "$convergenceJSON1","$convergenceJSON2", "$METHOD" )
+    print("hello from ", $temp_K, "$METHOD" )
 
     from typing import Dict, Union
     from pydantic import BaseModel, Field
@@ -1326,9 +1323,8 @@ process GOMC_GEMC_Production {
     cpus 8
     debug false
     input:
-    tuple val(temp_K), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp),\
-    path(xsc1),path(coor1),path(xsc2),path(coor2)
-    tuple val(temp_K), val(METHOD),path(gemc_conf)
+    tuple val(temp_K),path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp),\
+    path(xsc1),path(coor1),path(xsc2),path(coor2),val(METHOD),path(gemc_conf)
     output:
     path("GOMC_GEMC_Production*"), emit: grids
     path("GOMC_GEMC_Production.log"),  emit: record
@@ -1348,19 +1344,19 @@ workflow build_NVT_system {
     main:
     build_solvent_system(statepoint_and_solvent_xml)
     write_namd_confs(build_solvent_system.out.system,jinja_channel)
-    NAMD_NVT_equilibration(build_solvent_system.out.system, write_namd_confs.out.namd)
-    //write_gomc_confs(build_solvent_system.out.charmm,NAMD_NVT_equilibration.out.restart_files)
-    //GOMC_NPT_equilibration(build_solvent_system.out.system, write_gomc_confs.out.npt_conf, NAMD_NVT_equilibration.out.restart_files)
-    write_gomc_calibration_confs(build_solvent_system.out.charmm,NAMD_NVT_equilibration.out.restart_files)
-    GOMC_Ewald_Calibration(build_solvent_system.out.system, write_gomc_calibration_confs.out.ewald_calibration_conf,\
-    NAMD_NVT_equilibration.out.restart_files)
-    plot_grids(build_solvent_system.out.statepoint,GOMC_Ewald_Calibration.out.grids)
-
+    NVT_input=build_solvent_system.out.system.join(write_namd_confs.out.namd, by:0)
+    NAMD_NVT_equilibration(NVT_input)
+    WGC_input=build_solvent_system.out.charmm.join(NAMD_NVT_equilibration.out.restart_files, by:0)
+    write_gomc_calibration_confs(WGC_input)
+    GCE_input=build_solvent_system.out.system.join(NAMD_NVT_equilibration.out.restart_files,by:0).join(write_gomc_calibration_confs.out.ewald_calibration_conf,by:0)
+    GOMC_Ewald_Calibration(GCE_input)
+    pginput=NAMD_NVT_equilibration.out.restart_files.join(GOMC_Ewald_Calibration.out.grids, by:0)
+    plot_grids(pginput)
 
     emit:
-    restart_files = NAMD_NVT_equilibration.out.restart_files
-    system = build_solvent_system.out.system
-    charmm = build_solvent_system.out.charmm
+    //restart_files = NAMD_NVT_equilibration.out.restart_files
+    //system = build_solvent_system.out.system
+    //charmm = build_solvent_system.out.charmm
     convergence = plot_grids.out.convergence
 
     
@@ -1368,13 +1364,12 @@ workflow build_NVT_system {
 
 workflow build_GEMC_system {
     take:
-    restartChannel
     convergenceChannel
     main:
-    build_two_box_system(restartChannel)
+    build_two_box_system(convergenceChannel)
     methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
-    joinedChannel = build_two_box_system.out.charmm.join(convergenceChannel,by:0)
-    combinedChannel=joinedChannel.combine(methods)
+    combinedChannel=build_two_box_system.out.charmm.combine(methods)
     write_gemc_production_confs(combinedChannel)
-    GOMC_GEMC_Production(build_two_box_system.out.system,write_gemc_production_confs.out.gemc_conf)
+    GOMC_GEMC_Production_Input_Channel=build_two_box_system.out.system.combine(write_gemc_production_confs.out.gemc_conf,by:0)
+    GOMC_GEMC_Production(GOMC_GEMC_Production_Input_Channel)
 }
