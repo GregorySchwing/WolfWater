@@ -101,7 +101,7 @@ log.info """\
         restartChannel = build_NVT_system.out.restart_files.groupTuple(by:0,size:2,remainder:false)
         convergenceChannel = build_NVT_system.out.convergence.groupTuple(by:0,size:2,remainder:false)
         // Flatten the charmmChannel into a list with some values and some paths
-        flattenedList = restartChannel.collect { tuple ->
+        flattenedList = restartChannel.map { tuple ->
             def temperature = tuple[0]
             def densities = tuple[1]
             def statepointPaths = tuple[2]
@@ -112,7 +112,7 @@ log.info """\
             return [temperature, densities[0], densities[1], statepointPaths[0],statepointPaths[1], \
             xscPaths[0], xscPaths[1], coorPaths[0], coorPaths[1]]
         }
-        convergenceChannelFlattened = convergenceChannel.collect { tuple ->
+        convergenceChannelFlattened = convergenceChannel.map { tuple ->
             def temperature = tuple[0]
             def densities = tuple[1]
             def statepointPaths = tuple[2]
