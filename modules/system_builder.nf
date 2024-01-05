@@ -1227,8 +1227,8 @@ process write_gemc_production_confs {
     # MC move ratios
     DisFreq = 0.34
     RotFreq = 0.34
-    VolFreq = 0.01
-    MultiParticleFreq=0.01
+    VolFreq = 0.02
+    MultiParticleFreq=0.00
     RegrowthFreq = 0.10
     IntraSwapFreq = 0.00
     IntraMEMC_2Freq = 0.00
