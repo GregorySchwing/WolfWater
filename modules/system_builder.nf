@@ -1225,9 +1225,9 @@ process write_gemc_production_confs {
     RcutCoulomb_box_1=loaded_point2.models["${METHOD}"].ConvergedRCut
 
     # MC move ratios
-    DisFreq = 0.34
+    DisFreq = 0.35
     RotFreq = 0.34
-    VolFreq = 0.02
+    VolFreq = 0.01
     MultiParticleFreq=0.00
     RegrowthFreq = 0.10
     IntraSwapFreq = 0.00
