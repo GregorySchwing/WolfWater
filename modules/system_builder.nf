@@ -864,7 +864,11 @@ process write_gomc_calibration_confs {
     NUM_POINTS = 50.0
     RCC_START = 10.0
     #RCC_END = int(liquid_box_length_Ang/2.0)
-    RCC_END = (float(liquid_box_length_Ang)/2.0)*0.90
+    if (temperature==600):
+        percentage = 0.80
+    else:
+        percentage = 0.90
+    RCC_END = (float(liquid_box_length_Ang)/2.0)*percentage
     RCC_DELTA = (RCC_END-RCC_START)/(NUM_POINTS-1)
     ALPHA_START = 0.0
     ALPHA_END = 0.5
