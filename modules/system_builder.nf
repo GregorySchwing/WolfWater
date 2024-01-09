@@ -1210,16 +1210,18 @@ process write_gemc_production_confs {
 
     # calc MC steps for gomc equilb
     # number of simulation steps
-    gomc_steps_equilibration = 100000000 #  set value for paper = 60 * 10**6
-    gomc_steps_production = 100000000 # set value for paper = 60 * 10**6
-    console_output_freq = 10000 # Monte Carlo Steps between console output
+    gomc_steps_equilibration = 1000000 #  set value for paper = 1 * 10**6
+    gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
+    console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 1000 # Monte Carlo Steps for pressure calculation
-    block_ave_output_freq = 10000000 # Monte Carlo Steps between console output
-    coordinate_output_freq = 10000000 # # set value for paper = 50 * 10**3
+    block_ave_output_freq = 100000 # Monte Carlo Steps between console output
+    coordinate_output_freq = 100 # # set value for paper = 50 * 10**3
+    restart_output_freq = 1000000 # # set value for paper = 50 * 10**3
+
     EqSteps = 100000 # MCS for equilibration
     AdjSteps = 1000 #MCS for adjusting max displacement, rotation, volume, etc.
 
-    MC_steps = int(gomc_steps_equilibration)
+    MC_steps = int(gomc_steps_production)
     # cutoff and tail correction
     Rcut_ang = 12 * u.angstrom
     Rcut_low_ang = 1.0 * u.angstrom
@@ -1286,8 +1288,8 @@ process write_gemc_production_confs {
                                                             "EqSteps": EqSteps,
                                                             "AdjSteps":AdjSteps,
                                                             "PressureCalc": [True, pressure_calc_freq],
-                                                            "RestartFreq": [True, coordinate_output_freq],
-                                                            "CheckpointFreq": [True, coordinate_output_freq],
+                                                            "RestartFreq": [True, restart_output_freq],
+                                                            "CheckpointFreq": [True, restart_output_freq],
                                                             "DCDFreq": [True, coordinate_output_freq],
                                                             "ConsoleFreq": [True, console_output_freq],
                                                             "BlockAverageFreq":[True, block_ave_output_freq],
