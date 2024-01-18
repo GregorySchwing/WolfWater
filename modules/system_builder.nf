@@ -141,7 +141,7 @@ process build_solvent_system {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/NVT/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
@@ -261,7 +261,7 @@ process build_two_box_system {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
@@ -398,7 +398,7 @@ process write_namd_confs {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/namd_input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/NVT/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/namd_input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
@@ -480,8 +480,13 @@ process write_namd_confs {
     #nvt_eq_steps=50000
     #npt_eq_steps=100000
     minsteps=1000
-    nvt_eq_steps=20000
-    npt_eq_steps=20000
+    if (${params.debugging}):
+        nvt_eq_steps=1000
+        npt_eq_steps=1000
+    else:
+        nvt_eq_steps=20000
+        npt_eq_steps=20000
+
     coords["waterModel"]="TIP3"
     coords["temp"]=loaded_point.temperature
     coords["rcut_couloumb"]=loaded_point.rcut_couloumb
@@ -550,7 +555,7 @@ process NAMD_NVT_equilibration {
     cache 'lenient'
     fair true
     container "${params.container__namd}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/namd_nvt_eq", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/NVT/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/namd_nvt_eq", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
@@ -757,7 +762,7 @@ process write_gomc_calibration_confs {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/NVT/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
@@ -827,7 +832,11 @@ process write_gomc_calibration_confs {
 
     restart_coor = "${restart_coor}"
     restart_xsc = "${restart_xsc}"
-    MC_steps=5000
+    if (${params.debugging}):
+        MC_steps=2000
+    else:
+        MC_steps=5000
+
     #restart_chk = ""
     gomc_control.write_gomc_control_file(charmm, conf_filename='ewald_calibration',  ensemble_type='NVT', RunSteps=MC_steps, Restart=True, \
                                         check_input_files_exist=False, Temperature=float(temperature) * u.Kelvin, ExpertMode=True,\
@@ -861,7 +870,10 @@ process write_gomc_calibration_confs {
 
                                                                 }
                                         )
-    NUM_POINTS = 50.0
+    if (${params.debugging}):
+        NUM_POINTS = 5.0
+    else:
+        NUM_POINTS = 50.0
     RCC_START = 10.0
     #RCC_END = int(liquid_box_length_Ang/2.0)
     if (temperature==600):
@@ -893,7 +905,7 @@ process GOMC_Ewald_Calibration {
     cache 'lenient'
     fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/NVT/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
@@ -917,7 +929,7 @@ process plot_grids {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_plots", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/NVT/temperature_${temp_K}_density_${Rho_kg_per_m_cubed}/gomc_ewald_calibration_plots", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
@@ -1152,7 +1164,7 @@ process write_gemc_production_confs {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/methods/${METHOD}/input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/methods/${METHOD}/input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
@@ -1210,17 +1222,22 @@ process write_gemc_production_confs {
 
     # calc MC steps for gomc equilb
     # number of simulation steps
-    gomc_steps_equilibration = 1000000 #  set value for paper = 1 * 10**6
+    if (${params.debugging}):
+        gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
+    else:
+        gomc_steps_equilibration = 1000000
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 1000 # Monte Carlo Steps for pressure calculation
     block_ave_output_freq = 100000 # Monte Carlo Steps between console output
     coordinate_output_freq = 100 # # set value for paper = 50 * 10**3
     restart_output_freq = 1000000 # # set value for paper = 50 * 10**3
-
-    EqSteps = 100000 # MCS for equilibration
-    AdjSteps = 1000 #MCS for adjusting max displacement, rotation, volume, etc.
-
+    if (${params.debugging}):
+        EqSteps = 100 # MCS for equilibration
+        AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
+    else:
+        EqSteps = 100000 # MCS for equilibration
+        AdjSteps = 1000 #MCS for adjusting max displacement, rotation, volume, etc.
     MC_steps = int(gomc_steps_production)
     # cutoff and tail correction
     Rcut_ang = 12 * u.angstrom
@@ -1319,13 +1336,11 @@ process write_gemc_production_confs {
     """
 }
 
-
-
 process GOMC_GEMC_Production {
     cache 'lenient'
     fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/systems/temperature_${temp_K}_gemc/methods/${METHOD}/production", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/methods/${METHOD}/production", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
@@ -1333,13 +1348,151 @@ process GOMC_GEMC_Production {
     path(xsc1),path(coor1),path(xsc2),path(coor2),val(METHOD),path(gemc_conf)
     output:
     path("GOMC_GEMC_Production*"), emit: grids
-    path("GOMC_GEMC_Production.log"),  emit: record
+    tuple val(temp_K),val(METHOD),path("GOMC_GEMC_Production.log"),  emit: record
+
     shell:
     """
     
     #!/bin/bash
     cat ${gemc_conf} > local.conf
     GOMC_CPU_GEMC +p${task.cpus} local.conf > GOMC_GEMC_Production.log
+    """
+}
+
+process Extract_Density_GOMC_GEMC_Production {
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/methods/${METHOD}/extracted", mode: 'copy', overwrite: false
+    cpus 1
+    debug false
+    input:
+    tuple val(temp_K),val(METHOD),path(logfile)
+    output:
+    tuple val(temp_K),val(METHOD),\
+    path("Density_BOX_0.csv"),path("Density_BOX_1.csv"),\
+    //path("MEAN_Density_BOX_0.csv"),path("MEAN_Density_BOX_1.csv"),\
+    emit: analysis
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import re
+    import os
+    import numpy as np
+    from pathlib import Path
+    def extract(filename,regex_pattern):
+
+        EnRegex = re.compile(regex_pattern)
+        print('extract_target',filename, 'pattern',regex_pattern)
+        steps = []
+        densities = []
+        try:
+            with open(filename, 'r') as f:
+                for line in f:
+                    if EnRegex.match(line):
+                        try:
+                            steps.append(float(line.split()[1]))
+                            densities.append(float(line.split()[8]))
+                        except:
+                            print(line)
+                            print("An exception occurred") 
+        except:
+            print("Cant open",filename) 
+        steps_np = np.array(steps)
+        densities_np = np.array(densities)
+        return steps_np, densities_np
+
+    steps_box_0, densities_box_0 = extract("$logfile","STAT_0")
+    df = pd.DataFrame(densities_box_0, index=steps_box_0, columns=[''])
+    df.to_csv('Density_BOX_0.csv', header=False, sep=' ')
+
+    steps_box_1, densities_box_1 = extract("$logfile","STAT_1")
+    df = pd.DataFrame(densities_box_1, index=steps_box_1, columns=[''])
+    df.to_csv('Density_BOX_1.csv', header=False, sep=' ')
+    """
+}
+
+
+process Plot_GOMC_GEMC_Production { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/", mode: 'copy', overwrite: false
+    cpus 1
+    debug true
+    input: val(input_list)
+    output: path("test_with_eq_density.csv")
+
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import re
+    import os
+    import numpy as np
+    from pathlib import Path
+    def extract(filename):
+
+        EnRegex = re.compile("STAT_0")
+        print('extract_target',filename)
+
+        steps = []
+        energies = []
+        densities = []
+        try:
+            with open(filename, 'r') as f:
+                for line in f:
+                    if EnRegex.match(line):
+                        try:
+                            steps.append(float(line.split()[1]))
+                            energies.append(float(line.split()[8]))
+
+                        except:
+                            print(line)
+                            print("An exception occurred") 
+        except:
+            print("Cant open",filename) 
+        steps_np = np.array(steps)
+        energies_np = np.array(energies)
+        return energies_np.mean()
+
+    data_string = "$input_list"
+    data_string = data_string[1:-1]
+    data_list = data_string.split(", ")
+    #data_list = ast.literal_eval(data_string)
+    # Reshape the list into rows with three entries each
+    rows = [data_list[i:i+3] for i in range(0, len(data_list), 3)]
+
+    # Create a DataFrame
+    df = pd.DataFrame(rows, columns=['Temperature', 'Label', 'File'])
+
+    # Function to apply extract method to each row in the DataFrame
+    def apply_extract(row):
+        try:
+            # Create a path variable from the 'File' column
+            #file_path = os.path.abspath(row['File'])
+            file_path = Path(row['File']).resolve()
+            print(file_path,"exists",file_path.is_file())
+            try:
+                with open(file_path) as f:
+                    print("opened",file_path)
+            except:
+                print("Cant open",file_path) 
+
+            # Assuming 'extract' method takes a file path as an argument
+            #result = extract(file_path)
+            #return result
+            return None
+        except Exception as e:
+            print(f"Error processing file {row['File']}: {e}")
+            return None
+    # Apply the extract method to each row in the DataFrame and create a new column 'eq_density'
+    df['eq_density'] = df.apply(apply_extract, axis=1)
+
+    # Save the DataFrame to a CSV file
+    df.to_csv("test_with_eq_density.csv", index=False)
+
     """
 }
 
@@ -1378,4 +1531,8 @@ workflow build_GEMC_system {
     write_gemc_production_confs(combinedChannel)
     GOMC_GEMC_Production_Input_Channel=build_two_box_system.out.system.combine(write_gemc_production_confs.out.gemc_conf,by:0)
     GOMC_GEMC_Production(GOMC_GEMC_Production_Input_Channel)
+    Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
+
+    //Plot_GEMC_Input = GOMC_GEMC_Production.out.record.collect()
+    //Plot_GOMC_GEMC_Production(Plot_GEMC_Input)
 }
