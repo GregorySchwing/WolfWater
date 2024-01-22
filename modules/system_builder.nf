@@ -1225,13 +1225,13 @@ process write_gemc_production_confs {
     if (${params.debugging}):
         gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
     else:
-        gomc_steps_equilibration = 1000000
+        gomc_steps_equilibration = 10000000
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 1000 # Monte Carlo Steps for pressure calculation
     block_ave_output_freq = 100000 # Monte Carlo Steps between console output
     coordinate_output_freq = 100 # # set value for paper = 50 * 10**3
-    restart_output_freq = 1000000 # # set value for paper = 50 * 10**3
+    restart_output_freq = gomc_steps_equilibration # # set value for paper = 50 * 10**3
     if (${params.debugging}):
         EqSteps = 100 # MCS for equilibration
         AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
@@ -1347,7 +1347,7 @@ process GOMC_GEMC_Production {
     tuple val(temp_K),path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp),\
     path(xsc1),path(coor1),path(xsc2),path(coor2),val(METHOD),path(gemc_conf)
     output:
-    path("GOMC_GEMC_Production*"), emit: grids
+    path("*"), emit: grids
     tuple val(temp_K),val(METHOD),path("GOMC_GEMC_Production.log"),  emit: record
 
     shell:
