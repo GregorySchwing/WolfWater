@@ -879,7 +879,7 @@ process write_gomc_calibration_confs {
     if (temperature==600):
         percentage = 0.80
     else:
-        percentage = 0.90
+        percentage = 0.80
     RCC_END = (float(liquid_box_length_Ang)/2.0)*percentage
     RCC_DELTA = (RCC_END-RCC_START)/(NUM_POINTS-1)
     ALPHA_START = 0.0
