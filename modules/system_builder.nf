@@ -1369,9 +1369,7 @@ process Extract_Density_GOMC_GEMC_Production {
     input:
     tuple val(temp_K),val(METHOD),path(logfile)
     output:
-    tuple val(temp_K),val(METHOD),\
-    path("Density_BOX_0.csv"),path("Density_BOX_1.csv"),\
-    //path("MEAN_Density_BOX_0.csv"),path("MEAN_Density_BOX_1.csv"),\
+    tuple path("${temp_K}_${METHOD}_BOX_0.csv"),path("${temp_K}_${METHOD}_BOX_1.csv"),\
     emit: analysis
     script:
     """
@@ -1404,12 +1402,12 @@ process Extract_Density_GOMC_GEMC_Production {
         return steps_np, densities_np
 
     steps_box_0, densities_box_0 = extract("$logfile","STAT_0")
-    df = pd.DataFrame(densities_box_0, index=steps_box_0, columns=[''])
-    df.to_csv('Density_BOX_0.csv', header=False, sep=' ')
+    df = pd.DataFrame(densities_box_0, index=None, columns=['${temp_K}_${METHOD}_BOX_0'])
+    df.to_csv("${temp_K}_${METHOD}_BOX_0.csv", header=True, sep=' ', index=False)
 
     steps_box_1, densities_box_1 = extract("$logfile","STAT_1")
-    df = pd.DataFrame(densities_box_1, index=steps_box_1, columns=[''])
-    df.to_csv('Density_BOX_1.csv', header=False, sep=' ')
+    df = pd.DataFrame(densities_box_1, index=None, columns=['${temp_K}_${METHOD}_BOX_1'])
+    df.to_csv("${temp_K}_${METHOD}_BOX_1.csv", header=True, sep=' ', index=False)
     """
 }
 
@@ -1421,78 +1419,12 @@ process Plot_GOMC_GEMC_Production {
     publishDir "${params.output_folder}/systems/plot_gemc/", mode: 'copy', overwrite: false
     cpus 1
     debug true
-    input: val(input_list)
-    output: path("test_with_eq_density.csv")
+    input: path("*")
+    output: path("merged_data.csv")
 
-    script:
+    shell:
     """
-    #!/usr/bin/env python
-    import pandas as pd
-    import re
-    import os
-    import numpy as np
-    from pathlib import Path
-    def extract(filename):
-
-        EnRegex = re.compile("STAT_0")
-        print('extract_target',filename)
-
-        steps = []
-        energies = []
-        densities = []
-        try:
-            with open(filename, 'r') as f:
-                for line in f:
-                    if EnRegex.match(line):
-                        try:
-                            steps.append(float(line.split()[1]))
-                            energies.append(float(line.split()[8]))
-
-                        except:
-                            print(line)
-                            print("An exception occurred") 
-        except:
-            print("Cant open",filename) 
-        steps_np = np.array(steps)
-        energies_np = np.array(energies)
-        return energies_np.mean()
-
-    data_string = "$input_list"
-    data_string = data_string[1:-1]
-    data_list = data_string.split(", ")
-    #data_list = ast.literal_eval(data_string)
-    # Reshape the list into rows with three entries each
-    rows = [data_list[i:i+3] for i in range(0, len(data_list), 3)]
-
-    # Create a DataFrame
-    df = pd.DataFrame(rows, columns=['Temperature', 'Label', 'File'])
-
-    # Function to apply extract method to each row in the DataFrame
-    def apply_extract(row):
-        try:
-            # Create a path variable from the 'File' column
-            #file_path = os.path.abspath(row['File'])
-            file_path = Path(row['File']).resolve()
-            print(file_path,"exists",file_path.is_file())
-            try:
-                with open(file_path) as f:
-                    print("opened",file_path)
-            except:
-                print("Cant open",file_path) 
-
-            # Assuming 'extract' method takes a file path as an argument
-            #result = extract(file_path)
-            #return result
-            return None
-        except Exception as e:
-            print(f"Error processing file {row['File']}: {e}")
-            return None
-    # Apply the extract method to each row in the DataFrame and create a new column 'eq_density'
-    df['eq_density'] = df.apply(apply_extract, axis=1)
-
-    # Save the DataFrame to a CSV file
-    df.to_csv("test_with_eq_density.csv", index=False)
-
+    paste * > merged_data.csv
     """
 }
 
@@ -1532,7 +1464,7 @@ workflow build_GEMC_system {
     GOMC_GEMC_Production_Input_Channel=build_two_box_system.out.system.combine(write_gemc_production_confs.out.gemc_conf,by:0)
     GOMC_GEMC_Production(GOMC_GEMC_Production_Input_Channel)
     Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
-
+    Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Plot_GOMC_GEMC_Production
     //Plot_GEMC_Input = GOMC_GEMC_Production.out.record.collect()
     //Plot_GOMC_GEMC_Production(Plot_GEMC_Input)
 }
