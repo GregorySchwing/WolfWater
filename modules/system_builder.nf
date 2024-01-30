@@ -1473,7 +1473,7 @@ process Plot_GOMC_GEMC_Production {
     plt.title('Box 0 Density/MC Step', fontsize=20)
 
     # Save the plot as a PNG file
-    plt.savefig('box_0.png', bbox_inches='tight'))
+    plt.savefig('box_0.png', bbox_inches='tight')
 
     # Display the plot
     plt.show()
@@ -1495,7 +1495,7 @@ process Plot_GOMC_GEMC_Production {
     plt.title('Box 1 Density/MC Step', fontsize=20)
 
     # Save the plot as a PNG file
-    plt.savefig('box_1.png', bbox_inches='tight'))
+    plt.savefig('box_1.png', bbox_inches='tight')
 
     # Display the plot
     plt.show()
