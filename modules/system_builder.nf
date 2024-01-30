@@ -1467,6 +1467,11 @@ process Plot_GOMC_GEMC_Production {
             marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'blue'))  # Default values
             plt.plot(df.index, df[col], label=f'{col}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
 
+            # Plot a solid horizontal line at the initial point of each temperature
+            initial_value = df.loc[0, col]
+            plt.axhline(y=initial_value, color="black", linestyle='--', linewidth=2)
+
+
     plt.xlabel('MC Step', fontsize=18)
     plt.ylabel('Density', fontsize=18)
     plt.legend(fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
@@ -1488,6 +1493,11 @@ process Plot_GOMC_GEMC_Production {
             method = col.split('_')[1] + '_' + col.split('_')[2]
             marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'blue'))  # Default values
             plt.plot(df.index, df[col], label=f'{col}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+            # Plot a solid horizontal line at the initial point of each temperature
+            initial_value = df.loc[0, col]
+            plt.axhline(y=initial_value, color="black", linestyle='--', linewidth=2)
+
 
     plt.xlabel('MC Step', fontsize=18)
     plt.ylabel('Density', fontsize=18)
