@@ -1589,6 +1589,99 @@ process Plot_GOMC_GEMC_Production_VLE {
 }
 
 
+process Plot_GOMC_GEMC_Production_VLE_Per_Density { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/", mode: 'copy', overwrite: false
+    cpus 1
+    debug true
+    input: path(data_csv)
+    output: path ("per_density.png")
+
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    # Load the CSV file into a pandas DataFrame
+    df = pd.read_csv("$data_csv", sep='\t')
+    # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
+    method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
+        df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
+        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h','s',],
+        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':','-'],  # Different line styles        
+        ['full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full'],  # Alternating fill pattern
+        ['red', 'red', 'blue', 'blue', 'green', 'yellow', 'orange', 'green', 'green', 'grey', 'purple'],  # Alternating colors
+    )}
+    method_data = {}
+    # Plot for Box 0
+    plt.figure(figsize=(10, 6))
+
+    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
+    for idx, col in enumerate(df.columns):
+        temperature = col.split('_')[0]
+        method = col.split('_')[1] + '_' + col.split('_')[2]
+        # Append temperature and density to the corresponding method in the dictionary
+        if method not in method_data:
+            method_data[method] = {'temperature': [], 'density': []}
+        method_data[method]['temperature'].append(int(temperature))
+        method_data[method]['density'].append(df[col].mean())
+        if (method == "RAHBARI_DSF"):
+            method = "EWALD"
+            if method not in method_data:
+                method_data[method] = {'temperature': [], 'density': []}
+            method_data[method]['temperature'].append(int(temperature))
+            method_data[method]['density'].append(df[col][0])
+
+    # Sort temperature and density lists for each method by density
+    for method, data in method_data.items():
+        temp_density = list(zip(data['temperature'], data['density']))
+        temp_density.sort(key=lambda x: x[1])  # Sort by density
+        method_data[method]['temperature'], method_data[method]['density'] = zip(*temp_density)
+
+    import matplotlib.pyplot as plt
+
+    # Get unique density values
+    unique_densities = sorted(set(method_data["EWALD"]["density"]))
+
+    # Create subplots based on the number of unique density values
+    num_subplots = len(unique_densities)
+    fig, axs = plt.subplots(1, num_subplots, figsize=(15, 5))
+
+    markers = ['o', 's', '^', 'D', 'v', '<', ]
+    colors = ['red', 'blue', 'green', 'yellow', 'orange', 'purple'],  # Alternating colors
+
+    # Iterate over each subplot
+    # Iterate over each subplot
+    for i, density in enumerate(unique_densities):
+        axs[i].set_title(f'Ewald Density: {density}')
+        axs[i].set_ylabel('Density')
+        axs[i].tick_params(axis='x', rotation=90)  # Adjust rotation angle as needed
+        # Get temperature and method values for the current density
+        methods = []
+        densities = []
+        ew_dens = 0
+        for method, data in method_data.items():
+            if method != "EWALD":
+                methods.append(method)
+                densities.append(data['density'][i])
+            else:
+                ew_dens = data['density'][i]
+        # Plotting bar chart for each method
+        #axs[i].bar(methods, densities, color='blue')
+        axs[i].scatter(methods, densities)
+        axs[i].axhline(y=ew_dens, color="black", linestyle='--', linewidth=2)
+    # Save the plot as a PNG file
+    plt.savefig('per_density.png', bbox_inches='tight')
+
+    # Display the plot
+    plt.show()
+    """
+}
+
+
 workflow build_NVT_system {
     take:
     statepoint_and_solvent_xml
@@ -1628,6 +1721,7 @@ workflow build_GEMC_system {
     Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
     Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
     Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out)
+    Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out)
     //Plot_GEMC_Input = GOMC_GEMC_Production.out.record.collect()
     //Collate_GOMC_GEMC_Production(Plot_GEMC_Input)
 }
