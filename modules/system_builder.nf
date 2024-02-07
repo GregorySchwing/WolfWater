@@ -1513,6 +1513,82 @@ process Plot_GOMC_GEMC_Production {
 }
 
 
+process Plot_GOMC_GEMC_Production_VLE { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/", mode: 'copy', overwrite: false
+    cpus 1
+    debug true
+    input: path(data_csv)
+    output: path ("vle.png")
+
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    # Load the CSV file into a pandas DataFrame
+    df = pd.read_csv("$data_csv", sep='\t')
+    # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
+    method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
+        df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
+        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h','s',],
+        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':','-'],  # Different line styles        
+        ['full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full'],  # Alternating fill pattern
+        ['red', 'red', 'blue', 'blue', 'green', 'yellow', 'orange', 'green', 'green', 'grey', 'purple'],  # Alternating colors
+    )}
+    method_data = {}
+    # Plot for Box 0
+    plt.figure(figsize=(10, 6))
+
+    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
+    for idx, col in enumerate(df.columns):
+        temperature = col.split('_')[0]
+        method = col.split('_')[1] + '_' + col.split('_')[2]
+        # Append temperature and density to the corresponding method in the dictionary
+        if method not in method_data:
+            method_data[method] = {'temperature': [], 'density': []}
+        method_data[method]['temperature'].append(int(temperature))
+        method_data[method]['density'].append(df[col].mean())
+        if (method == "RAHBARI_DSF"):
+            method = "EWALD"
+            if method not in method_data:
+                method_data[method] = {'temperature': [], 'density': []}
+            method_data[method]['temperature'].append(int(temperature))
+            method_data[method]['density'].append(df[col][0])
+
+    # Sort temperature and density lists for each method by density
+    for method, data in method_data.items():
+        temp_density = list(zip(data['temperature'], data['density']))
+        temp_density.sort(key=lambda x: x[1])  # Sort by density
+        method_data[method]['temperature'], method_data[method]['density'] = zip(*temp_density)
+
+    # Plotting sorted data
+    plt.plot(method_data["EWALD"]['density'], method_data["EWALD"]['temperature'], label=f'EWALD', linestyle='-', color="black", marker='o', fillstyle="full")
+    for method, data in method_data.items():
+        if method != "EWALD":
+            marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
+            plt.plot(data['density'], data['temperature'], label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+
+    plt.xlabel('Density', fontsize=18)
+    plt.ylabel('Temperature', fontsize=18)
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    lgd = plt.legend(by_label.values(), by_label.keys(),fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.title('VLE', fontsize=20)
+
+    # Save the plot as a PNG file
+    plt.savefig('vle.png', bbox_extra_artists=(lgd,), bbox_inches='tight')
+
+    # Display the plot
+    plt.show()
+    """
+}
+
+
 workflow build_NVT_system {
     take:
     statepoint_and_solvent_xml
@@ -1549,7 +1625,9 @@ workflow build_GEMC_system {
     GOMC_GEMC_Production_Input_Channel=build_two_box_system.out.system.combine(write_gemc_production_confs.out.gemc_conf,by:0)
     GOMC_GEMC_Production(GOMC_GEMC_Production_Input_Channel)
     Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
-    Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production | Plot_GOMC_GEMC_Production
+    Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
+    Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
+    Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out)
     //Plot_GEMC_Input = GOMC_GEMC_Production.out.record.collect()
     //Collate_GOMC_GEMC_Production(Plot_GEMC_Input)
 }
