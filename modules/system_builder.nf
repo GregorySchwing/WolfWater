@@ -1416,7 +1416,7 @@ process Collate_GOMC_GEMC_Production {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/plot_gemc/", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
     cpus 1
     debug true
     input: path("*")
@@ -1429,11 +1429,82 @@ process Collate_GOMC_GEMC_Production {
 }
 
 
+process Extract_Vapor_Pressure_GOMC_GEMC_Production {
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/methods/${METHOD}/extracted/vapor_pressure", mode: 'copy', overwrite: false
+    cpus 1
+    debug false
+    input:
+    tuple val(temp_K),val(METHOD),path(logfile)
+    output:
+    tuple path("${temp_K}_${METHOD}_BOX_0.csv"),path("${temp_K}_${METHOD}_BOX_1.csv"),\
+    emit: analysis
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import re
+    import os
+    import numpy as np
+    from pathlib import Path
+    def extract(filename,regex_pattern):
+
+        EnRegex = re.compile(regex_pattern)
+        print('extract_target',filename, 'pattern',regex_pattern)
+        steps = []
+        densities = []
+        try:
+            with open(filename, 'r') as f:
+                for line in f:
+                    if EnRegex.match(line):
+                        try:
+                            steps.append(float(line.split()[1]))
+                            densities.append(float(line.split()[3]))
+                        except:
+                            print(line)
+                            print("An exception occurred") 
+        except:
+            print("Cant open",filename) 
+        steps_np = np.array(steps)
+        densities_np = np.array(densities)
+        return steps_np, densities_np
+
+    steps_box_0, densities_box_0 = extract("$logfile","STAT_0")
+    df = pd.DataFrame(densities_box_0, index=None, columns=['${temp_K}_${METHOD}_BOX_0'])
+    df.to_csv("${temp_K}_${METHOD}_BOX_0.csv", header=True, sep=' ', index=False)
+
+    steps_box_1, densities_box_1 = extract("$logfile","STAT_1")
+    df = pd.DataFrame(densities_box_1, index=None, columns=['${temp_K}_${METHOD}_BOX_1'])
+    df.to_csv("${temp_K}_${METHOD}_BOX_1.csv", header=True, sep=' ', index=False)
+    """
+}
+
+
+process Collate_GOMC_GEMC_Production_VP { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
+    cpus 1
+    debug true
+    input: path("*")
+    output: path("merged_data.csv")
+
+    shell:
+    """
+    paste * > merged_data.csv
+    """
+}
+
+
+
 process Plot_GOMC_GEMC_Production { 
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/plot_gemc/", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
     cpus 1
     debug true
     input: path(data_csv)
@@ -1517,7 +1588,7 @@ process Plot_GOMC_GEMC_Production_VLE {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/plot_gemc/", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
     cpus 1
     debug true
     input: path(data_csv)
@@ -1593,7 +1664,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/systems/plot_gemc/", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
     cpus 1
     debug true
     input: path(data_csv)
@@ -1682,6 +1753,278 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
 }
 
 
+process Plot_GOMC_GEMC_Production_VP { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
+    cpus 1
+    debug true
+    input: path(data_csv)
+    output: path("vapor_pressure.png")
+
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    # Load the CSV file into a pandas DataFrame
+    df = pd.read_csv("$data_csv", sep='\t')
+    # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
+    method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
+        df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
+        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h'],
+        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':'],  # Different line styles        
+        ['full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full', 'none'],  # Alternating fill pattern
+        ['red', 'black', 'blue', 'green', 'purple', 'purple', 'orange', 'green', 'red', 'red'],  # Alternating colors
+    )}
+
+    # Plot for Box 0
+    plt.figure(figsize=(10, 6))
+
+    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
+    for idx, col in enumerate(df.columns):
+        if 'BOX_0' in col:
+            temperature = col.split('_')[0]
+            method = col.split('_')[1] + '_' + col.split('_')[2]
+            marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'blue'))  # Default values
+            plt.plot(df.index, df[col], label=f'{col}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+            # Plot a solid horizontal line at the initial point of each temperature
+            initial_value = df.loc[0, col]
+            plt.axhline(y=initial_value, color="black", linestyle='--', linewidth=2)
+
+
+    plt.xlabel('MC Step', fontsize=18)
+    plt.ylabel('Vapor Pressure', fontsize=18)
+    plt.legend(fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.title('Box 0 Density/MC Step', fontsize=20)
+
+    # Save the plot as a PNG file
+    plt.savefig('box_0.png', bbox_inches='tight')
+
+    # Display the plot
+    plt.show()
+
+    # Plot for Box 1
+    plt.figure(figsize=(10, 6))
+
+    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 1
+    for idx, col in enumerate(df.columns):
+        if 'BOX_1' in col:
+            temperature = col.split('_')[0]
+            method = col.split('_')[1] + '_' + col.split('_')[2]
+            marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'blue'))  # Default values
+            plt.plot(df.index, df[col], label=f'{col}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+            # Plot a solid horizontal line at the initial point of each temperature
+            initial_value = df.loc[0, col]
+            plt.axhline(y=initial_value, color="black", linestyle='--', linewidth=2)
+
+
+    plt.xlabel('MC Step', fontsize=18)
+    plt.ylabel('Density', fontsize=18)
+    plt.legend(fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.title('Box 1 Density/MC Step', fontsize=20)
+
+    # Save the plot as a PNG file
+    plt.savefig('box_1.png', bbox_inches='tight')
+
+    # Display the plot
+    plt.show()
+    """
+}
+
+
+process Plot_GOMC_GEMC_Production_VLE_VP { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
+    cpus 1
+    debug true
+    input: path(data_csv)
+    output: path ("vapor_pressure.png")
+
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    # Load the CSV file into a pandas DataFrame
+    df = pd.read_csv("$data_csv", sep='\t')
+    # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
+    method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
+        df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
+        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h','s',],
+        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':','-'],  # Different line styles        
+        ['full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full'],  # Alternating fill pattern
+        ['red', 'red', 'blue', 'blue', 'green', 'yellow', 'orange', 'green', 'green', 'grey', 'purple'],  # Alternating colors
+    )}
+    method_data_box_0 = {}
+    method_data_box_1 = {}
+    # Plot for Box 0
+    plt.figure(figsize=(10, 6))
+
+    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
+    for idx, col in enumerate(df.columns):
+        if 'BOX_0' in col:
+            temperature = col.split('_')[0]
+            method = col.split('_')[1] + '_' + col.split('_')[2]
+            # Append temperature and density to the corresponding method in the dictionary
+            if method not in method_data_box_0:
+                method_data_box_0[method] = {'temperature': [], 'vapor_pressure': []}
+            method_data_box_0[method]['temperature'].append(int(temperature))
+            method_data_box_0[method]['vapor_pressure'].append(df[col].mean())
+            if (method == "RAHBARI_DSF"):
+                method = "EWALD"
+                if method not in method_data_box_0:
+                    method_data_box_0[method] = {'temperature': [], 'vapor_pressure': []}
+                method_data_box_0[method]['temperature'].append(int(temperature))
+                method_data_box_0[method]['vapor_pressure'].append(df[col][0])
+
+
+        if 'BOX_1' in col:
+            temperature = col.split('_')[0]
+            method = col.split('_')[1] + '_' + col.split('_')[2]
+            # Append temperature and density to the corresponding method in the dictionary
+            if method not in method_data_box_1:
+                method_data_box_1[method] = {'temperature': [], 'vapor_pressure': []}
+            method_data_box_1[method]['temperature'].append(int(temperature))
+            method_data_box_1[method]['vapor_pressure'].append(df[col].mean())
+            if (method == "RAHBARI_DSF"):
+                method = "EWALD"
+                if method not in method_data_box_1:
+                    method_data_box_1[method] = {'temperature': [], 'vapor_pressure': []}
+                method_data_box_1[method]['temperature'].append(int(temperature))
+                method_data_box_1[method]['vapor_pressure'].append(df[col][0])
+
+    # Plotting sorted data
+    plt.plot(method_data_box_0["EWALD"]['temperature'], method_data_box_0["EWALD"]['vapor_pressure'], label=f'EWALD', linestyle='-', color="black", marker='o', fillstyle="full")
+    for method, data in method_data_box_0.items():
+        if method != "EWALD":
+            marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
+            plt.plot(data['temperature'], data['vapor_pressure'],  label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+    plt.plot(method_data_box_1["EWALD"]['temperature'], method_data_box_1["EWALD"]['vapor_pressure'], label=f'EWALD', linestyle='-', color="black", marker='o', fillstyle="full")
+    for method, data in method_data_box_1.items():
+        if method != "EWALD":
+            marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
+            plt.plot(data['temperature'], data['vapor_pressure'],  label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+    plt.xlabel('Temperature', fontsize=18)
+    plt.ylabel('Vapor Pressure', fontsize=18)
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    lgd = plt.legend(by_label.values(), by_label.keys(),fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.title('VLE', fontsize=20)
+
+    # Save the plot as a PNG file
+    plt.savefig('vapor_pressure.png', bbox_extra_artists=(lgd,), bbox_inches='tight')
+
+    # Display the plot
+    plt.show()
+    """
+}
+
+
+process Plot_GOMC_GEMC_Production_VLE_Per_Density_VP { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
+    cpus 1
+    debug true
+    input: path(data_csv)
+    output: path ("per_density.png")
+
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    # Load the CSV file into a pandas DataFrame
+    df = pd.read_csv("$data_csv", sep='\t')
+    # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
+    method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
+        df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
+        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h','s',],
+        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':','-'],  # Different line styles        
+        ['full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full'],  # Alternating fill pattern
+        ['red', 'red', 'blue', 'blue', 'green', 'yellow', 'orange', 'green', 'green', 'grey', 'purple'],  # Alternating colors
+    )}
+    method_data = {}
+    # Plot for Box 0
+    plt.figure(figsize=(10, 6))
+
+    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
+    for idx, col in enumerate(df.columns):
+        temperature = col.split('_')[0]
+        method = col.split('_')[1] + '_' + col.split('_')[2]
+        # Append temperature and density to the corresponding method in the dictionary
+        if method not in method_data:
+            method_data[method] = {'temperature': [], 'density': []}
+        method_data[method]['temperature'].append(int(temperature))
+        method_data[method]['density'].append(df[col].mean())
+        if (method == "RAHBARI_DSF"):
+            method = "EWALD"
+            if method not in method_data:
+                method_data[method] = {'temperature': [], 'density': []}
+            method_data[method]['temperature'].append(int(temperature))
+            method_data[method]['density'].append(df[col][0])
+
+    # Sort temperature and density lists for each method by density
+    for method, data in method_data.items():
+        temp_density = list(zip(data['temperature'], data['density']))
+        temp_density.sort(key=lambda x: x[1])  # Sort by density
+        method_data[method]['temperature'], method_data[method]['density'] = zip(*temp_density)
+
+    import matplotlib.pyplot as plt
+
+    # Get unique density values
+    unique_densities = sorted(set(method_data["EWALD"]["density"]))
+
+    # Create subplots based on the number of unique density values
+    num_subplots = len(unique_densities)
+    fig, axs = plt.subplots(1, num_subplots, figsize=(15, 5))
+
+    markers = ['o', 's', '^', 'D', 'v', '<', ]
+    colors = ['red', 'blue', 'green', 'yellow', 'orange', 'purple'],  # Alternating colors
+
+    # Iterate over each subplot
+    # Iterate over each subplot
+    for i, density in enumerate(unique_densities):
+        axs[i].set_title(f'Ewald Density: {density}')
+        axs[i].set_ylabel('Density')
+        axs[i].tick_params(axis='x', rotation=90)  # Adjust rotation angle as needed
+        # Get temperature and method values for the current density
+        methods = []
+        densities = []
+        ew_dens = 0
+        for method, data in method_data.items():
+            if method != "EWALD":
+                methods.append(method)
+                densities.append(data['density'][i])
+            else:
+                ew_dens = data['density'][i]
+        # Plotting bar chart for each method
+        #axs[i].bar(methods, densities, color='blue')
+        axs[i].scatter(methods, densities)
+        axs[i].axhline(y=ew_dens, color="black", linestyle='--', linewidth=2)
+    # Save the plot as a PNG file
+    plt.savefig('per_density.png', bbox_inches='tight')
+
+    # Display the plot
+    plt.show()
+    """
+}
+
+
+
+
 workflow build_NVT_system {
     take:
     statepoint_and_solvent_xml
@@ -1722,6 +2065,13 @@ workflow build_GEMC_system {
     Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
     Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out)
     Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out)
+
+    Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
+    Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
+    Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
+    //Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
+    //Plot_GOMC_GEMC_Production_VLE_Per_Density_VP(Collate_GOMC_GEMC_Production_VP.out)
+
     //Plot_GEMC_Input = GOMC_GEMC_Production.out.record.collect()
     //Collate_GOMC_GEMC_Production(Plot_GEMC_Input)
 }
