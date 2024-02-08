@@ -1902,17 +1902,17 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
                 method_data_box_1[method]['vapor_pressure'].append(df[col][0])
 
     # Plotting sorted data
-    plt.plot(method_data_box_0["EWALD"]['temperature'], method_data_box_0["EWALD"]['vapor_pressure'], label=f'EWALD', linestyle='-', color="black", marker='o', fillstyle="full")
+    plt.plot(method_data_box_0["EWALD"]['temperature'], method_data_box_0["EWALD"]['vapor_pressure'], label=f'EWALD Liquid', linestyle='-', color="black", marker='o', fillstyle="full")
     for method, data in method_data_box_0.items():
         if method != "EWALD":
             marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
-            plt.plot(data['temperature'], data['vapor_pressure'],  label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+            plt.plot(data['temperature'], data['vapor_pressure'],  label=f'{method} Liquid', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
 
-    plt.plot(method_data_box_1["EWALD"]['temperature'], method_data_box_1["EWALD"]['vapor_pressure'], label=f'EWALD', linestyle='-', color="black", marker='o', fillstyle="full")
+    plt.plot(method_data_box_1["EWALD"]['temperature'], method_data_box_1["EWALD"]['vapor_pressure'], label=f'EWALD Vapor', linestyle='-', color="black", marker='o', fillstyle="full")
     for method, data in method_data_box_1.items():
         if method != "EWALD":
             marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
-            plt.plot(data['temperature'], data['vapor_pressure'],  label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+            plt.plot(data['temperature'], data['vapor_pressure'],  label=f'{method} Vapor', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
 
     plt.xlabel('Temperature', fontsize=18)
     plt.ylabel('Vapor Pressure', fontsize=18)
