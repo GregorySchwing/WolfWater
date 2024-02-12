@@ -261,27 +261,29 @@ process build_two_box_system_already_calibrated {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
     input:
     tuple val(temp_K), val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), \
     path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json"), \
-    path(convergence_obj1, stageAs: "convergence_obj1.json"), path(convergence_obj2, stageAs: "convergence_obj2.json"), \
     path(xsc1, stageAs: "xsc1.xsc"), path(xsc2, stageAs: "xsc2.xsc"),\
     path(coor1, stageAs: "coor1.coor"), path(coor2, stageAs: "coor2.coor"),\
-    path(path_to_xml)
+    path(pdb1, stageAs: "psb1.pdb"), path(pdb2, stageAs: "pdb2.pdb"),\
+    path(psf1, stageAs: "psf1.psf"), path(psf2, stageAs: "psf2.psf"),\
+    path(chk, stageAs: "chk.chk"), path(convergence_obj),\
+    path(path_to_xml), val(METHOD)
 
     output:
-    tuple val(temp_K), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
-    path(xsc1),path(coor1),path(xsc2),path(coor2), emit: system
-    tuple val(temp_K), path(xsc1),path(coor1),path(xsc2),path(coor2), emit: restart_files
-    tuple val(temp_K), path("charmm.pkl"), path(xsc1),path(coor1),path(xsc2),path(coor2),path(convergence_obj1),path(convergence_obj2), emit: charmm
-
+    output:
+    tuple val(temp_K), val(METHOD), path(pdb1), path(psf1), path(pdb2), path(psf2), path("system.inp"), \
+    path(xsc1),path(coor1),path(xsc2),path(coor2),path(chk),path("in_GEMC_NVT.conf"), emit: system
+    tuple val(temp_K), path("charmm.pkl"), path(xsc1),path(coor1),path(xsc2),path(coor2),path(statepoint1),path(statepoint2), emit: charmm
+    tuple val(temp_K), path("charmm.pkl"),path(statepoint1),path(statepoint2), emit: charmm_norestarts
     script:
     """
-    #!/usr/bin/env python
+     #!/usr/bin/env python
     from typing import List
     from pydantic import BaseModel
     print("hello from ", $temp_K, $Rho_kg_per_m_cubed1,$Rho_kg_per_m_cubed2)
@@ -306,6 +308,29 @@ process build_two_box_system_already_calibrated {
     loaded_point2 = load_point_from_json("$statepoint2")
     print("Loaded point2")
     print(loaded_point2)
+
+
+    # Convergence data
+    from typing import Dict, Union
+    from pydantic import BaseModel, Field
+    import json
+
+    class InnerModel(BaseModel):
+        ConvergedRCut: float
+        ConvergedAlpha: float
+        ConvergedFAlpha: float
+        ConvergedDFDAlpha: float
+
+    class FooBarModel(BaseModel):
+        models: Dict[str, Dict[int, InnerModel]]  # Adjusted for the nested dictionary
+
+    # Function to load Pydantic objects from JSON file
+    def load_point_from_json(file_path: str) -> FooBarModel:
+        with open(file_path, 'r') as file:
+            json_data = file.read()
+            return FooBarModel.model_validate_json(json_data)
+    
+    convergence_obj = load_point_from_json("${convergence_obj}")
 
     # GOMC Example for the NVT Ensemble using MoSDeF [1, 2, 5-10, 13-17]
 
@@ -389,6 +414,124 @@ process build_two_box_system_already_calibrated {
 
     charmm.write_pdb()
 
+    # calc MC steps for gomc equilb
+    # number of simulation steps
+    if (${params.debugging}):
+        gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
+    else:
+        gomc_steps_equilibration = 50000000
+    gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
+    console_output_freq = 100 # Monte Carlo Steps between console output
+    pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
+    block_ave_output_freq = 100000 # Monte Carlo Steps between console output
+    coordinate_output_freq = 100000 # # set value for paper = 50 * 10**3
+    restart_output_freq = gomc_steps_equilibration # # set value for paper = 50 * 10**3
+    if (${params.debugging}):
+        EqSteps = 100 # MCS for equilibration
+        AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
+    else:
+        EqSteps = 100000 # MCS for equilibration
+        AdjSteps = 1000 #MCS for adjusting max displacement, rotation, volume, etc.
+    MC_steps = int(gomc_steps_production)
+    # cutoff and tail correction
+    Rcut_ang = 12 * u.angstrom
+    Rcut_low_ang = 1.0 * u.angstrom
+    LRC = True
+    Exclude = "1-4"
+    RcutCoulomb_box_0=convergence_obj.models["${METHOD}"][0].ConvergedRCut
+    RcutCoulomb_box_1=convergence_obj.models["${METHOD}"][1].ConvergedRCut
+
+    # MC move ratios
+    DisFreq = 0.35
+    RotFreq = 0.34
+    VolFreq = 0.01
+    MultiParticleFreq=0.00
+    RegrowthFreq = 0.10
+    IntraSwapFreq = 0.00
+    IntraMEMC_2Freq = 0.00
+    CrankShaftFreq = 0.00
+    SwapFreq = 0.20
+    MEMC_2Freq = 0.0
+
+    gomc_output_data_every_X_steps = 50 * 10**3 # # set value for paper = 50 * 10**3
+    # output all data and calc frequecy
+    output_true_list_input = [
+        True,
+        int(gomc_output_data_every_X_steps),
+    ]
+    output_false_list_input = [
+        False,
+        int(gomc_output_data_every_X_steps),
+    ]
+    output_file_prefix="GOMC_GEMC_Production"
+
+
+    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT.conf', 'GEMC_NVT', MC_steps, ${temp_K},
+                                        Restart=True,
+                                        check_input_files_exist=False,
+                                        Coordinates_box_0="${pdb1}",
+                                        Coordinates_box_1="${pdb2}",
+                                        Structure_box_0="${psf1}",
+                                        Structure_box_1="${psf2}",
+                                        binCoordinates_box_0="${coor1}",
+                                        extendedSystem_box_0="${xsc1}",
+                                        binCoordinates_box_1="${coor2}",
+                                        extendedSystem_box_1="${xsc2}",
+                                        input_variables_dict={"VDWGeometricSigma": False,
+                                                            "Ewald": False,
+                                                            "ElectroStatic": True,
+                                                            "PRNG": int(0),
+                                                            "Pressure": None,
+                                                            "Potential": "VDW",
+                                                            "LRC": LRC,
+                                                            "Rcut": 12,
+                                                            "RcutLow": 1,
+                                                            "RcutCoulomb_box_0": RcutCoulomb_box_0,
+                                                            "RcutCoulomb_box_1": RcutCoulomb_box_1,
+                                                            "Exclude": Exclude,
+                                                            "DisFreq": DisFreq,
+                                                            "VolFreq": VolFreq,
+                                                            "RotFreq": RotFreq,
+                                                            "MultiParticleFreq": MultiParticleFreq,
+                                                            "RegrowthFreq": RegrowthFreq,
+                                                            "IntraSwapFreq": IntraSwapFreq,
+                                                            "IntraMEMC-2Freq": IntraMEMC_2Freq,
+                                                            "CrankShaftFreq": CrankShaftFreq,
+                                                            "SwapFreq": SwapFreq,
+                                                            "MEMC-2Freq": MEMC_2Freq,
+                                                            "OutputName": output_file_prefix,
+                                                            "EqSteps": EqSteps,
+                                                            "AdjSteps":AdjSteps,
+                                                            "PressureCalc": [True, pressure_calc_freq],
+                                                            "RestartFreq": [True, restart_output_freq],
+                                                            "CheckpointFreq": [True, restart_output_freq],
+                                                            "DCDFreq": [True, coordinate_output_freq],
+                                                            "ConsoleFreq": [True, console_output_freq],
+                                                            "BlockAverageFreq":[True, block_ave_output_freq],
+                                                            "HistogramFreq": output_false_list_input,
+                                                            "CoordinatesFreq": output_false_list_input,
+                                                            "CBMC_First": 12,
+                                                            "CBMC_Nth": 10,
+                                                            "CBMC_Ang": 50,
+                                                            "CBMC_Dih": 50,
+                                                            }
+                                        )
+
+    kind_pot = "${METHOD}".split('_')
+    file1 = open("in_GEMC_NVT.conf", "a")
+    defAlphaLine = "{box}\\t{val}\\n".format(box="Wolf", val="True")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfKind", val=kind_pot[0])
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfPotential", val=kind_pot[1])
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=convergence_obj.models["${METHOD}"][0].ConvergedAlpha)
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="1", val=convergence_obj.models["${METHOD}"][1].ConvergedAlpha)
+    file1.writelines(defAlphaLine)
+
+    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="${chk}")
+    file1.writelines(defAlphaLine)
     """
 }
 
@@ -397,7 +540,7 @@ process build_two_box_system {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/ewald/input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
@@ -1835,7 +1978,7 @@ process write_gemc_ewald_confs {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/methods/EWALD/input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/ewald/input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
@@ -2572,12 +2715,12 @@ process GOMC_GEMC_Production {
     cache 'lenient'
     fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/methods/${METHOD}/production", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/methods/${METHOD}/production", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
-    tuple val(temp_K),path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp),\
-    path(xsc1),path(coor1),path(xsc2),path(coor2),val(METHOD),path(gemc_conf)
+    tuple val(temp_K), val(METHOD), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp),\
+    path(xsc1),path(coor1),path(xsc2),path(coor2),path(chk),path(gemc_conf)
     output:
     path("*"), emit: grids
     tuple val(temp_K),val(METHOD),path("GOMC_GEMC_Production.log"),  emit: record
@@ -2596,7 +2739,7 @@ process GOMC_GEMC_Production_Replica {
     //cache 'lenient'
     fair true
     container "${params.container__gomc}"
-    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/methods/EWALD/production", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/ewald/production", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
@@ -2651,7 +2794,7 @@ process Extract_Density_GOMC_GEMC_Production {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/methods/${METHOD}/extracted", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/methods/${METHOD}/extracted/density", mode: 'copy', overwrite: false
     cpus 1
     debug false
     input:
@@ -2721,7 +2864,7 @@ process Extract_Vapor_Pressure_GOMC_GEMC_Production {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/methods/${METHOD}/extracted/vapor_pressure", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/methods/${METHOD}/extracted/vapor_pressure", mode: 'copy', overwrite: false
     cpus 1
     debug false
     input:
@@ -3352,33 +3495,6 @@ workflow build_NVT_system {
     restart_files = NAMD_NVT_equilibration.out.restart_files
 }
 
-workflow build_GEMC_system_calibrate {
-    take:
-    convergenceChannel
-    main:
-    build_two_box_system_already_calibrated(convergenceChannel)
-    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
-    combinedChannel=build_two_box_system.out.charmm.combine(methods)
-    write_gemc_production_confs(combinedChannel)
-    GOMC_GEMC_Production_Input_Channel=build_two_box_system.out.system.combine(write_gemc_production_confs.out.gemc_conf,by:0)
-    GOMC_GEMC_Production(GOMC_GEMC_Production_Input_Channel)
-    Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
-    Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
-    Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
-    Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out)
-    Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out)
-
-    Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
-    Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
-    Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
-    //Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
-    //Plot_GOMC_GEMC_Production_VLE_Per_Density_VP(Collate_GOMC_GEMC_Production_VP.out)
-
-    //Plot_GEMC_Input = GOMC_GEMC_Production.out.record.collect()
-    //Collate_GOMC_GEMC_Production(Plot_GEMC_Input)
-}
-
-
 workflow build_GEMC_system {
     take:
     convergenceChannel
@@ -3401,4 +3517,32 @@ workflow build_GEMC_system_Calibrate {
     GOMC_GEMC_Calibration(GOMC_GEMC_Production_Input_Channel)
     pginput = GOMC_GEMC_Calibration.out.grids
     plot_grids_two_box(pginput)
+    emit:
+    convergence = plot_grids_two_box.out.convergence
+}
+
+
+workflow build_GEMC_system_wolf {
+    take:
+    convergenceChannel
+    main:
+    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
+    combinedChannel=convergenceChannel.combine(methods)
+    build_two_box_system_already_calibrated(combinedChannel)
+    GOMC_GEMC_Production_Input_Channel = build_two_box_system_already_calibrated.out.system
+    GOMC_GEMC_Production(GOMC_GEMC_Production_Input_Channel)
+    Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
+    Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
+    Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
+    Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out)
+    Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out)
+
+    Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
+    Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
+    Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
+    //Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
+    //Plot_GOMC_GEMC_Production_VLE_Per_Density_VP(Collate_GOMC_GEMC_Production_VP.out)
+
+    //Plot_GEMC_Input = GOMC_GEMC_Production.out.record.collect()
+    //Collate_GOMC_GEMC_Production(Plot_GEMC_Input)
 }

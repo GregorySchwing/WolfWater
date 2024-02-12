@@ -12,6 +12,7 @@ nextflow.enable.dsl=2
 include { build_NVT_system } from './modules/system_builder'
 include { build_GEMC_system } from './modules/system_builder'
 include { build_GEMC_system_Calibrate } from './modules/system_builder'
+include { build_GEMC_system_wolf } from './modules/system_builder'
 include { train_model } from './modules/model_builder'
 include { predict_model } from './modules/model_builder'
 include { initialize_scikit_optimize_model } from './modules/scikit_optimize'
@@ -121,6 +122,9 @@ log.info """\
         }
         gemc_calibration_input = tempAndDensity.join(build_GEMC_system.out.restart_files).combine(solvent_xml_channel)
         build_GEMC_system_Calibrate(gemc_calibration_input)
+        //build_GEMC_system_Calibrate.out.convergence.view()
+        gemc_wolf_production_input = tempAndDensity.join(build_GEMC_system.out.restart_files).join(build_GEMC_system_Calibrate.out.convergence).combine(solvent_xml_channel)
+        build_GEMC_system_wolf(gemc_wolf_production_input)
         return
 
         skopt_model = initialize_scikit_optimize_model(build_NVT_system.out.system)
