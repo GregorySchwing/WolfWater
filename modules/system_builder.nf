@@ -1486,7 +1486,7 @@ process write_gemc_ewald_calibration_confs {
     tuple val(temp_K), val(replica), val(METHOD),\
     path(rstpdb1), path(rstpsf1), path(rstpdb2), path(rstpsf2),\
     path(rstcoor1),path(rstxsc1), path(rstcoor2), path(rstxsc2), path(chk),\
-    path("system.inp"), path("in_GEMC_NVT.conf"), emit:gemc_calibration
+    path("system.inp"), path("calibration.conf"), emit:gemc_calibration
 
     script:
     """
@@ -1586,7 +1586,7 @@ process write_gemc_ewald_calibration_confs {
     output_file_prefix="GOMC_GEMC_Calibration"
 
 
-    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT.conf', 'GEMC_NVT', MC_steps, ${temp_K},
+    gomc_control.write_gomc_control_file(charmm, 'calibration.conf', 'GEMC_NVT', MC_steps, ${temp_K},
                                         Restart=True,
                                         check_input_files_exist=False,
                                         Coordinates_box_0="${rstpdb1}",
@@ -1650,7 +1650,7 @@ process write_gemc_ewald_calibration_confs {
     RCC_DELTA_BOX_0 = (RCC_END_BOX_0-RCC_START)/(NUM_POINTS-1)
     RCC_END_BOX_1 = (float(liquid_box_1_length_Ang)/2.0)*percentage
     RCC_DELTA_BOX_1 = (RCC_END_BOX_1-RCC_START)/(NUM_POINTS-1)
-    file1 = open("in_GEMC_NVT.conf", "a")
+    file1 = open("calibration.conf", "a")
     defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
     file1.writelines(defAlphaLine)
     defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start=ALPHA_START,\
