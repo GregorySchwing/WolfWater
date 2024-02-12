@@ -1581,7 +1581,7 @@ process plot_grids_two_box {
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/calibration/plots", mode: 'copy', overwrite: false
     cpus 1
 
-    debug true
+    debug false
     input:
     tuple val(temp_K), path(grids)
     output:
@@ -1698,8 +1698,13 @@ process plot_grids_two_box {
             'ConvergedFAlpha': df[min_row][min_col],
             'ConvergedDFDAlpha': df_slopes[min_row][min_col]
         }
+        # Add the result_dict to the model_dict under the appropriate model_name and each box_value
+        if model_name not in model_dict:
+            model_dict[model_name] = {}
 
-        model_dict[model_name]=result_dict
+        #for box_value in box_values:
+        #    model_dict[model_name][box_value] = result_dict
+        model_dict[model_name][box]=result_dict
 
         # Plotting one line per row in the subplot
         #df.plot(ax=axes[i], marker='o', linestyle='-', legend=False)
@@ -1808,7 +1813,10 @@ process plot_grids_two_box {
         ConvergedDFDAlpha: float
 
     class FooBarModel(BaseModel):
-        models: Dict[str, InnerModel]
+        models: Dict[str, Dict[int, InnerModel]]  # Adjusted for the nested dictionary
+
+    # Convert the result_dict to InnerModel object
+    inner_result_dict = InnerModel(**result_dict)
 
     # Create an instance of the model
     convergence_obj = FooBarModel(
@@ -1817,7 +1825,7 @@ process plot_grids_two_box {
 
     # Serialize the Pydantic object to JSON
     with open("convergence_obj.json", 'w') as file:
-        file.write(convergence_obj.model_dump_json())
+        file.write(convergence_obj.json())
     """
 }
 
@@ -2622,7 +2630,7 @@ process GOMC_GEMC_Calibration {
     container "${params.container__gomc}"
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/calibration/production", mode: 'copy', overwrite: false
     cpus 8
-    debug true
+    debug false
     input:
     tuple val(temp_K),path(pdb1), path(psf1), path(pdb2), path(psf2),path(inp),\
     path(xsc1),path(coor1),path(xsc2),path(coor2),path(chk),path(gemc_conf)
@@ -2698,7 +2706,7 @@ process Collate_GOMC_GEMC_Production {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
     cpus 1
-    debug true
+    debug false
     input: path("*")
     output: path("merged_data.csv")
 
@@ -2768,7 +2776,7 @@ process Collate_GOMC_GEMC_Production_VP {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
     cpus 1
-    debug true
+    debug false
     input: path("*")
     output: path("merged_data.csv")
 
@@ -2786,7 +2794,7 @@ process Plot_GOMC_GEMC_Production {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
     cpus 1
-    debug true
+    debug false
     input: path(data_csv)
     output: tuple path ("box_0.png"),path("box_1.png")
 
@@ -2870,7 +2878,7 @@ process Plot_GOMC_GEMC_Production_VLE {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
     cpus 1
-    debug true
+    debug false
     input: path(data_csv)
     output: path ("vle.png")
 
@@ -2946,7 +2954,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
     cpus 1
-    debug true
+    debug false
     input: path(data_csv)
     output: path ("per_density.png")
 
@@ -3039,7 +3047,7 @@ process Plot_GOMC_GEMC_Production_VP {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
     cpus 1
-    debug true
+    debug false
     input: path(data_csv)
     output: path("vapor_pressure.png")
 
@@ -3123,7 +3131,7 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
     cpus 1
-    debug true
+    debug false
     input: path(data_csv)
     output: path ("vapor_pressure.png")
 
@@ -3216,7 +3224,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density_VP {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
     cpus 1
-    debug true
+    debug false
     input: path(data_csv)
     output: path ("per_density.png")
 
