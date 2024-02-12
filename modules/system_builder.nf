@@ -1574,6 +1574,255 @@ process plot_grids {
 }
 
 
+process plot_grids_two_box {
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/calibration/plots", mode: 'copy', overwrite: false
+    cpus 1
+
+    debug true
+    input:
+    tuple val(temp_K), path(grids)
+    output:
+    tuple path("grids*.png"), path("limited_axes.png"), emit: figs
+    tuple val(temp_K), path("convergence_obj.json"), emit: convergence
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import re
+    import numpy as np
+
+
+    # Function to extract model name from file name using regex
+    def extract_model_name(file_name):
+        match = re.match(r'Wolf_Calibration_(\\w+)_BOX_(\\d+)_(.*)\\.dat', file_name)
+        if match:
+            return match.group(1)
+        else:
+            return None
+
+    # Function to extract model name from file name using regex
+    def extract_box(file_name):
+        match = re.match(r'Wolf_Calibration_(\\w+)_BOX_(\\d+)_(.*)\\.dat', file_name)
+        if match:
+            return match.group(2)
+        else:
+            return None
+
+    # Example list of files
+    file_list = "${grids}".split()
+
+    # Determine the number of subplots based on the number of files
+    num_subplots = len(file_list)
+
+    # Calculate the number of rows and columns for subplots
+    num_rows = (num_subplots + 1) // 2  # Ensure at least 1 row, with 2 columns per row
+    num_cols = min(2, num_subplots)  # 2 columns per row
+
+    # Create a new figure with subplots arranged in rows and columns
+    fig, axes = plt.subplots(num_rows, num_cols, figsize=(15, 4 * num_rows))
+
+    # Create a new figure with subplots arranged in rows and columns
+    fig_slopes, axes_slopes = plt.subplots(num_rows, num_cols, figsize=(15, 4 * num_rows))
+
+    fig_convergence, axes_convergence = plt.subplots(num_rows, num_cols, figsize=(15, 4 * num_rows), sharex=True)
+
+    # Flatten the axes array to simplify indexing
+    axes = axes.flatten()
+    axes_slopes = axes_slopes.flatten()
+    axes_convergence = axes_convergence.flatten()
+
+    # Hide any extra subplots
+    for i in range(num_subplots, num_rows * num_cols):
+        fig.delaxes(axes[i])
+        fig_slopes.delaxes(axes_slopes[i])
+        fig_convergence.delaxes(axes_convergence[i])
+
+    import random
+    extended_markers = [
+        'o', 's', '^', 'v', '<', '>', 'D', 'p', '*', 'h', '+', 'x', '|', '_',
+        '.', ',', '1', '2', '3', '4', '8', 'H', 'd', 'D', 'P', 'X', 'o', 's', 'p', '*', 'h', '+', 'x'
+    ]
+
+    model_dict = {}
+
+    # Iterate over files and plot each DataFrame in a subplot
+    for i, file_name in enumerate(file_list):
+        random.seed(0)
+        # Extract model name
+        model_name = extract_model_name(file_name)
+        box = extract_box(file_name)
+
+        # Load the CSV file into a DataFrame
+        df = pd.read_csv(file_name, index_col=0)
+        df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
+
+        desired_y_values = np.arange(-1, 1.1, 0.1)
+
+        for col in df.columns:
+            x = df.index  # Using DataFrame indices as x-values
+            y = df[col]
+
+            # Calculate the slope using numpy's gradient function
+            df_slopes[col] = np.gradient(y, x)
+
+
+        abs_df = df.abs()
+        abs_slopes_df = df_slopes.abs()
+
+        normalized_df=(abs_df-abs_df.min())/(abs_df.max()-abs_df.min())
+        normalized_slopes_df=(abs_slopes_df-abs_slopes_df.min())/(abs_slopes_df.max()-abs_slopes_df.min())
+
+        # Calculate Euclidean distance for each tuple across all columns
+        tuple_df = pd.concat([normalized_df, normalized_slopes_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
+
+        # Find the row and column of the minimum entry
+        min_entry_location = tuple_df.unstack().idxmin()
+
+        # Extract row and column indices
+        min_row, min_col = min_entry_location
+        print(f"Model name: {model_name}")
+        print(f"Box: {box}")
+        print(f"RCut of Minimum Entry: {min_row}")
+        print(f"Alpha of Minimum Entry: {min_col}")
+        print(f"Slope of Minimum Entry: ",df_slopes[min_row][min_col])
+        print(f"F(alpha) of Minimum Entry: ",df[min_row][min_col])
+
+        # Create a dictionary with the information
+        result_dict = {
+            'ConvergedRCut': min_row,
+            'ConvergedAlpha': min_col,  # Assuming column names are α
+            'ConvergedFAlpha': df[min_row][min_col],
+            'ConvergedDFDAlpha': df_slopes[min_row][min_col]
+        }
+
+        model_dict[model_name]=result_dict
+
+        # Plotting one line per row in the subplot
+        #df.plot(ax=axes[i], marker='o', linestyle='-', legend=False)
+        # Iterate over columns and plot each with a different marker and color
+        for column in df.columns:
+            # Generate random color and marker for each column
+            color = "#{:06x}".format(random.randint(0, 0xFFFFFF))  # Random hex color
+            marker = random.choice(extended_markers)  # Random marker
+            fill_style = random.choice(['full', 'left', 'right', 'none'])  # Random fill style
+
+            # Plotting one line per column in the subplot with random color, marker, and fill style
+            df[column].plot(
+                ax=axes[i],
+                marker=marker,
+                linestyle='-',
+                color=color,
+                fillstyle=fill_style,
+                legend=False
+            )
+
+            # Plotting one line per column in the subplot with random color, marker, and fill style
+            df_slopes[column].plot(
+                ax=axes_slopes[i],
+                marker=marker,
+                linestyle='-',
+                color=color,
+                fillstyle=fill_style,
+                legend=False
+            )
+
+
+            # Plotting one line per column in the subplot with random color, marker, and fill style
+            axes_convergence[i].plot(
+                df[column], 
+                df_slopes[column],
+                marker=marker,
+                linestyle='-',
+                color=color,
+                fillstyle=fill_style, 
+                label=None
+            )
+
+        #axes_slopes[i].text(result_dict['ConvergedAlpha'], result_dict['ConvergedDFDAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
+        axes_slopes[i].plot(result_dict['ConvergedAlpha'], result_dict['ConvergedDFDAlpha'], marker='*', markersize=20, linestyle='None', color='red')
+
+        #axes_convergence[i].text(result_dict['ConvergedFAlpha'], result_dict['ConvergedDFDAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
+        axes_convergence[i].plot(result_dict['ConvergedFAlpha'], result_dict['ConvergedDFDAlpha'], marker='*', markersize=20, linestyle='None', color='red')
+
+        #axes[i].text(result_dict['ConvergedAlpha'], result_dict['ConvergedFAlpha'], "RCut={:.2f}, α={:.2f}".format(float(result_dict['ConvergedRCut']),float(result_dict['ConvergedAlpha'])), fontsize=20, ha='right', va='bottom')
+        axes[i].plot(result_dict['ConvergedAlpha'], result_dict['ConvergedFAlpha'], marker='*', markersize=20, linestyle='None', color='red')
+
+        # Set plot labels and title
+        axes_slopes[i].set_xlabel('α')
+        axes_slopes[i].set_ylabel('d/dα f(α)')
+        axes_slopes[i].set_title(f'Model: {model_name}; Box: {box}')
+
+        # Set plot labels and title
+        axes_convergence[i].set_xlabel('f(α)')
+        axes_convergence[i].set_ylabel('d/dα f(α)')
+        axes_convergence[i].set_title(f'Model: {model_name}; Box: {box}')
+
+        # Set plot labels and title 
+        axes[i].set_xlabel('α')
+        axes[i].set_ylabel('f(α)')
+        axes[i].set_title(f'Model: {model_name}; Box: {box}')
+
+
+    # Create a single legend for the entire figure outside the canvas to the right
+    handles, labels = axes[0].get_legend_handles_labels()
+    #fig.legend(handles, labels, loc='right')
+    legend = fig.legend(handles, labels, bbox_to_anchor=(1.10, 0.5), loc='center right')
+    # Adjust layout
+    fig.tight_layout()
+    fig_slopes.tight_layout()
+    # Save the figure as 'grids.png'
+    fig.savefig('grids.png', bbox_inches='tight', bbox_extra_artists=[legend])
+    fig_slopes.savefig('grids_slopes.png', bbox_inches='tight', bbox_extra_artists=[legend])
+    fig_convergence.savefig('grids_convergence.png', bbox_inches='tight', bbox_extra_artists=[legend])
+
+    # Show the plot
+
+    # Create a second figure with subplots and limited y-axes to -1 to +1
+    fig2, axes2 = fig, axes
+
+    # Flatten the axes array to simplify indexing
+    axes2 = axes2.flatten()
+
+    # Iterate over subplots in the second figure and set y-axis limits
+    for ax in axes2:
+        ax.set_ylim(-1, 1)
+
+    # Save the second figure as 'limited_axes.png'
+    fig2.savefig('limited_axes.png', bbox_inches='tight')
+
+    # Show the plots
+    plt.show()
+
+    from typing import Dict, Union
+    from pydantic import BaseModel, Field
+    import json
+
+    class InnerModel(BaseModel):
+        ConvergedRCut: float
+        ConvergedAlpha: float
+        ConvergedFAlpha: float
+        ConvergedDFDAlpha: float
+
+    class FooBarModel(BaseModel):
+        models: Dict[str, InnerModel]
+
+    # Create an instance of the model
+    convergence_obj = FooBarModel(
+        models=model_dict
+    )
+
+    # Serialize the Pydantic object to JSON
+    with open("convergence_obj.json", 'w') as file:
+        file.write(convergence_obj.model_dump_json())
+    """
+}
+
+
+
 process write_gemc_ewald_confs {
     cache 'lenient'
     fair true
@@ -2378,7 +2627,7 @@ process GOMC_GEMC_Calibration {
     tuple val(temp_K),path(pdb1), path(psf1), path(pdb2), path(psf2),path(inp),\
     path(xsc1),path(coor1),path(xsc2),path(coor2),path(chk),path(gemc_conf)
     output:
-    path("*"), emit: grids
+    tuple val(temp_K), path("Wolf_Calibration_*"), emit: grids
     tuple val(temp_K),path("GOMC_GEMC_Production.log"),  emit: record
     shell:
     """
@@ -3142,4 +3391,6 @@ workflow build_GEMC_system_Calibrate {
     build_two_box_system_calibrate(convergenceChannel)
     GOMC_GEMC_Production_Input_Channel=build_two_box_system_calibrate.out.system
     GOMC_GEMC_Calibration(GOMC_GEMC_Production_Input_Channel)
+    pginput = GOMC_GEMC_Calibration.out.grids
+    plot_grids_two_box(pginput)
 }
