@@ -122,7 +122,6 @@ log.info """\
         }
         gemc_calibration_input = tempAndDensity.join(build_GEMC_system.out.restart_files).combine(solvent_xml_channel)
         build_GEMC_system_Calibrate(gemc_calibration_input)
-        //build_GEMC_system_Calibrate.out.convergence.view()
         gemc_wolf_production_input = tempAndDensity.join(build_GEMC_system.out.restart_files).join(build_GEMC_system_Calibrate.out.convergence).combine(solvent_xml_channel)
         build_GEMC_system_wolf(gemc_wolf_production_input)
         return
