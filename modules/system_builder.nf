@@ -410,8 +410,8 @@ process build_two_box_system {
 
     output:
     tuple val(temp_K), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
-    path(xsc1),path(coor1),path(xsc2),path(coor2), emit: system
-    tuple val(temp_K), path(xsc1),path(coor1),path(xsc2),path(coor2), emit: restart_files
+    path(xsc1),path(coor1),path(xsc2),path(coor2),path("charmm.pkl"),path(statepoint1),path(statepoint2), emit: system
+    //tuple val(temp_K), path(xsc1),path(coor1),path(xsc2),path(coor2), emit: restart_files
     tuple val(temp_K), path("charmm.pkl"), path(xsc1),path(coor1),path(xsc2),path(coor2),path(statepoint1),path(statepoint2), emit: charmm
     tuple val(temp_K), path("charmm.pkl"),path(statepoint1),path(statepoint2), emit: charmm_norestarts
     script:
@@ -1315,11 +1315,15 @@ process write_gemc_ewald_confs {
 
     debug false
     input:
-    tuple val(temp_K), path(charmm),path(xsc1), path(coor1), path(xsc2), path(coor2),\
-    path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json"),\
+    tuple val(temp_K), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp), \
+    path(xsc1), path(coor1), path(xsc2), path(coor2),\
+    path(charmm),path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json"),\
     val(replica),val(METHOD)
     output:
-    tuple val(temp_K), path("in_GEMC_NVT.conf"), val(replica), val(METHOD), emit:gemc_conf
+    tuple val(temp_K), val(replica),val(METHOD), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp), \
+    path(xsc1), path(coor1), path(xsc2), path(coor2),\
+    path(charmm),path(statepoint1), path(statepoint2),\
+    path("in_GEMC_NVT.conf"), emit:gemc_conf
 
     script:
     """
@@ -1475,9 +1479,9 @@ process write_gemc_ewald_calibration_confs {
     debug false
     input:
     tuple val(temp_K), val(replica), val(METHOD),\
+    path(charmm),path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json"),\
     path(rstpdb1), path(rstpsf1), path(rstpdb2), path(rstpsf2),\
-    path(rstcoor1),path(rstxsc1), path(rstcoor2), path(rstxsc2), path(chk),\
-    path(charmm),path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json")
+    path(rstcoor1),path(rstxsc1), path(rstcoor2), path(rstxsc2), path(chk)
     output:
     tuple val(temp_K), val(replica), val(METHOD),\
     path(rstpdb1), path(rstpsf1), path(rstpdb2), path(rstpsf2),\
@@ -1871,19 +1875,22 @@ process GOMC_GEMC_Production {
 
 
 process GOMC_GEMC_Production_Replica {
-    cache 'lenient'
+    //cache 'lenient'
     fair true
     container "${params.container__gomc}"
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/methods/${METHOD}/replicas/${replica}/production", mode: 'copy', overwrite: false
     cpus 8
     debug false
     input:
-    tuple val(temp_K),path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp),\
-    path(xsc1),path(coor1),path(xsc2),path(coor2),path(gemc_conf),val(replica),val(METHOD)
+    tuple val(temp_K), val(replica),val(METHOD), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp), \
+    path(xsc1), path(coor1), path(xsc2), path(coor2),\
+    path(charmm),path(statepoint1), path(statepoint2),\
+    path(gemc_conf)
     output:
     path("*"), emit: grids
     tuple val(temp_K), val(replica), val(METHOD),path("GOMC_GEMC_Production.log"),  emit: record
-    tuple val(temp_K), val(replica), val(METHOD), 
+    tuple val(temp_K), val(replica), val(METHOD), \
+    path(charmm),path(statepoint1), path(statepoint2),\
     path("GOMC_GEMC_Production_BOX_0_restart.pdb"),path("GOMC_GEMC_Production_BOX_0_restart.psf"),\
     path("GOMC_GEMC_Production_BOX_1_restart.pdb"),path("GOMC_GEMC_Production_BOX_1_restart.psf"),\
     path("GOMC_GEMC_Production_BOX_0_restart.coor"),path("GOMC_GEMC_Production_BOX_0_restart.xsc"),\
@@ -2662,25 +2669,15 @@ workflow build_GEMC_system {
     replicas = Channel.of(0,1,2,3,4)
     ewald = Channel.of("EWALD")
     replicas_ewald = replicas.combine(ewald)
-    replica_ewald_gemc = build_two_box_system.out.charmm.combine(replicas_ewald)
+    replica_ewald_gemc = build_two_box_system.out.system.combine(replicas_ewald)
     write_gemc_ewald_confs(replica_ewald_gemc)
-    GOMC_GEMC_Production_Input_Channel=build_two_box_system.out.system.combine(write_gemc_ewald_confs.out.gemc_conf,by:0)
+    GOMC_GEMC_Production_Input_Channel=write_gemc_ewald_confs.out.gemc_conf
     GOMC_GEMC_Production_Replica(GOMC_GEMC_Production_Input_Channel)
     // Filter out entries where the replica is 0
-    zeroethReplicas = GOMC_GEMC_Production_Replica.out.restart_files.filter { tuple -> tuple[1] == 0 }
-    CalibrationWriterInput = zeroethReplicas.join(build_two_box_system.out.charmm_norestarts)
-    CalibrationWriterInput.view()
+    //zeroethReplicas = GOMC_GEMC_Production_Replica.out.restart_files.filter { tuple -> tuple[1] == 0 }
+    CalibrationWriterInput = GOMC_GEMC_Production_Replica.out.restart_files
+    //CalibrationWriterInput.view()
     write_gemc_ewald_calibration_confs(CalibrationWriterInput)
-    write_gemc_ewald_calibration_confs.out.gemc_calibration.view()
     GOMC_GEMC_Calibration(write_gemc_ewald_calibration_confs.out.gemc_calibration)
-    //Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
-    //Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
-    //Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
-    //Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out)
-    //Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out)
 
-    //Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
-    //Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
-    //Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
-    
 }
