@@ -3016,6 +3016,90 @@ process Plot_GOMC_GEMC_Production {
 }
 
 
+process Plot_GOMC_GEMC_Production_Ewald { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/ewald/density", mode: 'copy', overwrite: false
+    cpus 1
+    debug false
+    input: path(data_csv)
+    output: tuple path ("box_0.png"),path("box_1.png")
+
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    # Load the CSV file into a pandas DataFrame
+    df = pd.read_csv("$data_csv", sep='\t')
+    # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
+    method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
+        df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
+        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h'],
+        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':'],  # Different line styles        
+        ['full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full', 'none'],  # Alternating fill pattern
+        ['red', 'black', 'blue', 'green', 'purple', 'purple', 'orange', 'green', 'red', 'red'],  # Alternating colors
+    )}
+
+    # Plot for Box 0
+    plt.figure(figsize=(10, 6))
+
+    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
+    for idx, col in enumerate(df.columns):
+        if 'BOX_0' in col:
+            temperature = col.split('_')[0]
+            method = col.split('_')[1] + '_' + col.split('_')[2]
+            marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'blue'))  # Default values
+            plt.plot(df.index, df[col], label=f'{col}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+            # Plot a solid horizontal line at the initial point of each temperature
+            initial_value = df.loc[0, col]
+            plt.axhline(y=initial_value, color="black", linestyle='--', linewidth=2)
+
+
+    plt.xlabel('MC Step', fontsize=18)
+    plt.ylabel('Density', fontsize=18)
+    plt.legend(fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.title('Box 0 Density/MC Step', fontsize=20)
+
+    # Save the plot as a PNG file
+    plt.savefig('box_0.png', bbox_inches='tight')
+
+    # Display the plot
+    plt.show()
+
+    # Plot for Box 1
+    plt.figure(figsize=(10, 6))
+
+    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 1
+    for idx, col in enumerate(df.columns):
+        if 'BOX_1' in col:
+            temperature = col.split('_')[0]
+            method = col.split('_')[1] + '_' + col.split('_')[2]
+            marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'blue'))  # Default values
+            plt.plot(df.index, df[col], label=f'{col}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+            # Plot a solid horizontal line at the initial point of each temperature
+            initial_value = df.loc[0, col]
+            plt.axhline(y=initial_value, color="black", linestyle='--', linewidth=2)
+
+
+    plt.xlabel('MC Step', fontsize=18)
+    plt.ylabel('Density', fontsize=18)
+    plt.legend(fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.title('Box 1 Density/MC Step', fontsize=20)
+
+    # Save the plot as a PNG file
+    plt.savefig('box_1.png', bbox_inches='tight')
+
+    # Display the plot
+    plt.show()
+    """
+}
+
+
 process Plot_GOMC_GEMC_Production_VLE { 
     cache 'lenient'
     fair true
@@ -3507,13 +3591,13 @@ workflow build_GEMC_system {
     
     Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production_Replica.out.record)
     Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
-    Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
-    Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out)
-    Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out)
+    Plot_GOMC_GEMC_Production_Ewald(Collate_GOMC_GEMC_Production.out)
+    //Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out)
+    //Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out)
 
-    Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production_Replica.out.record)
-    Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
-    Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
+    //Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production_Replica.out.record)
+    //Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
+    //Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
     emit:
     restart_files = GOMC_GEMC_Production_Replica.out.restart_files
 }
