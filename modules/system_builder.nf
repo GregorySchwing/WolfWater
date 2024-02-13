@@ -808,7 +808,7 @@ process build_two_box_system_calibrate {
     if (${params.debugging}):
         gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
     else:
-        gomc_steps_equilibration = 50000
+        gomc_steps_equilibration = 10000
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
@@ -2757,6 +2757,7 @@ process GOMC_GEMC_Production_Replica {
     path("GOMC_GEMC_Production_BOX_0_restart.psf"),\
     path("GOMC_GEMC_Production_BOX_1_restart.psf"),\
     path("GOMC_GEMC_Production_restart.chk"),  emit: restart_files
+    tuple val(temp_K), val("EWALD"), path("GOMC_GEMC_Production.log"),  emit: record
     shell:
     """
     
@@ -3503,6 +3504,16 @@ workflow build_GEMC_system {
     write_gemc_ewald_confs(build_two_box_system.out.system)
     GOMC_GEMC_Production_Input_Channel=write_gemc_ewald_confs.out.gemc_conf
     GOMC_GEMC_Production_Replica(GOMC_GEMC_Production_Input_Channel)
+    
+    Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production_Replica.out.record)
+    Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
+    Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
+    Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out)
+    Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out)
+
+    Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production_Replica.out.record)
+    Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
+    Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
     emit:
     restart_files = GOMC_GEMC_Production_Replica.out.restart_files
 }
