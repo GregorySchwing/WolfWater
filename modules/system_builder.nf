@@ -1827,10 +1827,13 @@ process plot_grids_two_box {
         normalized_slopes_df = normalized_slopes_df.multiply(slope_weight)
 
         # Calculate Euclidean distance for each tuple across all columns
-        tuple_df = pd.concat([normalized_df, normalized_slopes_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
+        #tuple_df = pd.concat([normalized_df, normalized_slopes_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
 
         # Find the row and column of the minimum entry
-        min_entry_location = tuple_df.unstack().idxmin()
+        #min_entry_location = tuple_df.unstack().idxmin()
+
+        min_entry_location = abs_df.unstack().idxmin()
+
 
         # Extract row and column indices
         min_row, min_col = min_entry_location
