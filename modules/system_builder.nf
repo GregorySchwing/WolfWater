@@ -1738,7 +1738,7 @@ process plot_grids_two_box {
     import re
     import numpy as np
     rel_error_weight = 0.75
-    slope_weight = 0.75
+    slope_weight = 0.25
 
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
