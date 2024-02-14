@@ -425,7 +425,7 @@ process build_two_box_system_already_calibrated {
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
     block_ave_output_freq = 100000 # Monte Carlo Steps between console output
     coordinate_output_freq = 100000 # # set value for paper = 50 * 10**3
-    restart_output_freq = gomc_steps_equilibration/20 # # set value for paper = 50 * 10**3
+    restart_output_freq = 100000 # # set value for paper = 50 * 10**3
     if (${params.debugging}):
         EqSteps = 100 # MCS for equilibration
         AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
@@ -814,7 +814,7 @@ process build_two_box_system_calibrate {
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
     block_ave_output_freq = 100000 # Monte Carlo Steps between console output
     coordinate_output_freq = 100000 # # set value for paper = 50 * 10**3
-    restart_output_freq = gomc_steps_equilibration/20 # # set value for paper = 50 * 10**3
+    restart_output_freq = 10000 # # set value for paper = 50 * 10**3
     if (${params.debugging}):
         EqSteps = 100 # MCS for equilibration
         AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
@@ -2045,7 +2045,7 @@ process write_gemc_ewald_confs {
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
     block_ave_output_freq = 100000 # Monte Carlo Steps between console output
     coordinate_output_freq = 100000 # # set value for paper = 50 * 10**3
-    restart_output_freq = gomc_steps_equilibration/20 # # set value for paper = 50 * 10**3
+    restart_output_freq = 100000 # # set value for paper = 50 * 10**3
     if (${params.debugging}):
         EqSteps = 100 # MCS for equilibration
         AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
@@ -2207,7 +2207,7 @@ process write_gemc_ewald_confs_calibrate {
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
     block_ave_output_freq = 100000 # Monte Carlo Steps between console output
     coordinate_output_freq = 100000 # # set value for paper = 50 * 10**3
-    restart_output_freq = gomc_steps_equilibration/20 # # set value for paper = 50 * 10**3
+    restart_output_freq = 100000 # # set value for paper = 50 * 10**3
     if (${params.debugging}):
         EqSteps = 100 # MCS for equilibration
         AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
@@ -2406,7 +2406,7 @@ process write_gemc_ewald_calibration_confs {
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
     block_ave_output_freq = 100000 # Monte Carlo Steps between console output
     coordinate_output_freq = 100000 # # set value for paper = 50 * 10**3
-    restart_output_freq = gomc_steps_equilibration/20 # # set value for paper = 50 * 10**3
+    restart_output_freq = 100000 # # set value for paper = 50 * 10**3
     if (${params.debugging}):
         EqSteps = 100 # MCS for equilibration
         AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
@@ -2606,7 +2606,7 @@ process write_gemc_production_confs {
     pressure_calc_freq = 1000 # Monte Carlo Steps for pressure calculation
     block_ave_output_freq = 100000 # Monte Carlo Steps between console output
     coordinate_output_freq = 100 # # set value for paper = 50 * 10**3
-    restart_output_freq = gomc_steps_equilibration/20 # # set value for paper = 50 * 10**3
+    restart_output_freq = 100000 # # set value for paper = 50 * 10**3
     if (${params.debugging}):
         EqSteps = 100 # MCS for equilibration
         AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
