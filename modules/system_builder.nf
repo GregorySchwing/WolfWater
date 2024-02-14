@@ -819,8 +819,8 @@ process build_two_box_system_calibrate {
         EqSteps = 100 # MCS for equilibration
         AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
     else:
-        EqSteps = 20000 # MCS for equilibration
-        AdjSteps = 1000 #MCS for adjusting max displacement, rotation, volume, etc.
+        EqSteps = 1000 # MCS for equilibration
+        AdjSteps = 100 #MCS for adjusting max displacement, rotation, volume, etc.
     MC_steps = int(gomc_steps_production)
     # cutoff and tail correction
     Rcut_ang = 12 * u.angstrom
