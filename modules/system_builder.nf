@@ -1737,7 +1737,8 @@ process plot_grids_two_box {
     import matplotlib.pyplot as plt
     import re
     import numpy as np
-
+    rel_error_weight = 0.75
+    slope_weight = 0.75
 
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
@@ -1803,7 +1804,7 @@ process plot_grids_two_box {
         df = pd.read_csv(file_name, index_col=0)
         df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
 
-        desired_y_values = np.arange(-1, 1.1, 0.1)
+        desired_y_values = np.arange(-2, 2.1, 0.1)
 
         for col in df.columns:
             x = df.index  # Using DataFrame indices as x-values
@@ -1818,6 +1819,9 @@ process plot_grids_two_box {
 
         normalized_df=(abs_df-abs_df.min())/(abs_df.max()-abs_df.min())
         normalized_slopes_df=(abs_slopes_df-abs_slopes_df.min())/(abs_slopes_df.max()-abs_slopes_df.min())
+
+        normalized_df = normalized_df.multiply(rel_error_weight)
+        normalized_slopes_df = normalized_slopes_df.multiply(slope_weight)
 
         # Calculate Euclidean distance for each tuple across all columns
         tuple_df = pd.concat([normalized_df, normalized_slopes_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
