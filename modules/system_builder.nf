@@ -1944,7 +1944,7 @@ process plot_grids_two_box {
 
     # Iterate over subplots in the second figure and set y-axis limits
     for ax in axes2:
-        ax.set_ylim(-1, 1)
+        ax.set_ylim(-2, 2)
 
     # Save the second figure as 'limited_axes.png'
     fig2.savefig('limited_axes.png', bbox_inches='tight')
