@@ -1553,7 +1553,7 @@ process plot_grids {
         df = pd.read_csv(file_name, index_col=0)
         df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
 
-        desired_y_values = np.arange(-1, 1.1, 0.1)
+        desired_y_values = np.arange(-2, 2.1, 0.1)
 
         for col in df.columns:
             x = df.index  # Using DataFrame indices as x-values
