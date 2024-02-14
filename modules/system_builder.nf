@@ -1737,8 +1737,11 @@ process plot_grids_two_box {
     import matplotlib.pyplot as plt
     import re
     import numpy as np
-    rel_error_weight = 0.75
-    slope_weight = 0.25
+    #rel_error_weight = 0.75
+    #slope_weight = 0.25
+
+    rel_error_weight = 1.0
+    slope_weight = 0.0
 
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
