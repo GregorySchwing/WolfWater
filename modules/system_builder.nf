@@ -808,7 +808,7 @@ process build_two_box_system_calibrate {
     if (${params.debugging}):
         gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
     else:
-        gomc_steps_equilibration = 10000
+        gomc_steps_equilibration = 100000
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
@@ -919,7 +919,7 @@ process build_two_box_system_calibrate {
     RCC_END_BOX_1 = (float(vapor_box_length_Ang)/2.0)*percentage
     RCC_DELTA_BOX_1 = (RCC_END_BOX_1-RCC_START)/(NUM_POINTS-1)
     file1 = open("in_GEMC_NVT.conf", "a")
-    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
+    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="10000")
     file1.writelines(defAlphaLine)
     defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start=ALPHA_START,\
     end=ALPHA_END,delta=ALPHA_DELTA)
