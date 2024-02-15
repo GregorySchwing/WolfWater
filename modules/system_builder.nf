@@ -3486,8 +3486,23 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density_Line {
         method_dataframes[method][f'{temperature}_{box}'] = df[col]
 
 
-    # Add EWALD data to the corresponding DataFrame
-    method_dataframes["EWALD"] = df_ew
+    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
+    for idx, col in enumerate(df_ew.columns):
+        temperature = col.split('_')[0]
+        method = "EWALD"
+        if 'BOX_0' in col:
+            box = 0
+
+        if 'BOX_1' in col:
+            box = 1
+
+        # Create DataFrame for method if it doesn't exist
+        if method not in method_dataframes:
+            method_dataframes[method] = pd.DataFrame()
+
+        # Add density data to the corresponding DataFrame
+        method_dataframes[method][f'{temperature}_{box}'] = df_ew[col]
+
 
     import matplotlib.pyplot as plt
     # Plot each column of the DataFrame in a subfigure
