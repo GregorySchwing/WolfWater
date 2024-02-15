@@ -3486,8 +3486,9 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density_Line {
         #method_dataframes[method][f'{temperature}_{box}'] = df[col]
 
         # Add density data to the corresponding DataFrame
-        new_index = range(len(df[col]), len(df[col]) * 2)
-        method_dataframes[method][f'{temperature}_{box}'] = df[col].reindex(new_index)
+        N = len(df[col])
+        reindexed_column = pd.concat([pd.Series([np.nan] * N), df[col]]).reset_index(drop=True)
+        method_dataframes[method][f'{temperature}_{box}'] = reindexed_column
 
     # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
     for idx, col in enumerate(df_ew.columns):
