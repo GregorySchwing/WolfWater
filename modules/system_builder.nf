@@ -3259,7 +3259,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
     fig, axs = plt.subplots(1, num_subplots, figsize=(15, 5))
 
     markers = ['o', 's', '^', 'D', 'v', '<', ]
-    colors = ['red', 'blue', 'green', 'yellow', 'orange', 'purple']  
+    colors = ['red', 'blue',  'yellow', 'green','grey', 'purple']  
     # Alternating colors
 
     # Iterate over each subplot
@@ -3284,6 +3284,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
         axs[i].axhline(y=ew_dens, color="black", linestyle='--', linewidth=2)
     # Save the plot as a PNG file
     #plt.tight_layout()
+    ax.tick_params(labelbottom=False)
     plt.savefig('per_density.png', bbox_inches='tight')
 
     # Display the plot
