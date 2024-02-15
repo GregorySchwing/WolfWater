@@ -3119,7 +3119,7 @@ process Plot_GOMC_GEMC_Production_VLE {
     debug false
     input: 
     path(data_csv)
-    path(ewald_data_csv)
+    path(ewald_data_csv, stageAs: "ewald_merged.csv")
     output: path ("vle.png")
 
     script:
