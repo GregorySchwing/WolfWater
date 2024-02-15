@@ -3282,9 +3282,10 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
         #axs[i].bar(methods, densities, color='blue')
         axs[i].scatter(methods, densities, c=colors)
         axs[i].axhline(y=ew_dens, color="black", linestyle='--', linewidth=2)
+        axs[i].tick_params(labelbottom=False)
     # Save the plot as a PNG file
     #plt.tight_layout()
-    ax.tick_params(labelbottom=False)
+    
     plt.savefig('per_density.png', bbox_inches='tight')
 
     # Display the plot
