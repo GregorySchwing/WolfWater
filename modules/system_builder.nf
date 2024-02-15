@@ -2791,6 +2791,8 @@ process GOMC_GEMC_Calibration {
     output:
     tuple val(temp_K), path("Wolf_Calibration_*"), emit: grids
     tuple val(temp_K),path("GOMC_GEMC_Production.log"),  emit: record
+    tuple val(temp_K),path("GOMC_GEMC_Production_WOLF_CALIBRATION_BOX_*"),  emit: WCPLOTS
+
     shell:
     """
     
