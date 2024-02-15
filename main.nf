@@ -123,7 +123,7 @@ log.info """\
         gemc_calibration_input = tempAndDensity.join(build_GEMC_system.out.restart_files).combine(solvent_xml_channel)
         build_GEMC_system_Calibrate(gemc_calibration_input)
         gemc_wolf_production_input = tempAndDensity.join(build_GEMC_system.out.restart_files).join(build_GEMC_system_Calibrate.out.convergence).combine(solvent_xml_channel)
-        build_GEMC_system_wolf(gemc_wolf_production_input)
+        build_GEMC_system_wolf(gemc_wolf_production_input,build_GEMC_system.out.ewald_data)
         return
 
         skopt_model = initialize_scikit_optimize_model(build_NVT_system.out.system)
