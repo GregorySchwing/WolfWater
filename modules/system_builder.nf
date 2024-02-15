@@ -3264,7 +3264,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
     # Iterate over each subplot
     # Iterate over each subplot
     for i, density in enumerate(unique_densities):
-        axs[i].set_title(f'Ewald Density: {density}')
+        axs[i].set_title(f'{density} g/cm^3')
         axs[i].set_ylabel('Density')
         axs[i].tick_params(axis='x', rotation=90)  # Adjust rotation angle as needed
         # Get temperature and method values for the current density
@@ -3282,6 +3282,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
         axs[i].scatter(methods, densities, c=colors)
         axs[i].axhline(y=ew_dens, color="black", linestyle='--', linewidth=2)
     # Save the plot as a PNG file
+    plt.tight_layout()
     plt.savefig('per_density.png', bbox_inches='tight')
 
     # Display the plot
