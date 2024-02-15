@@ -3294,6 +3294,72 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
 }
 
 
+process Plot_GOMC_GEMC_Production_VLE_Per_Density_Line { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
+    cpus 1
+    debug false
+    input: 
+    path(data_csv)
+    path(ewald_data_csv, stageAs: "ewald_merged.csv")
+    output: path ("*.png")
+
+    script:
+    """
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    # Load the CSV file into a pandas DataFrame
+    df = pd.read_csv("$data_csv", sep='\t')
+    df_ew = pd.read_csv("$ewald_data_csv", sep='\t')
+
+    # Create a dictionary to store DataFrames for each method
+    method_dataframes = {}
+
+    # Iterate over each column in df and df_ew
+    for col in df.columns:
+        temperature = col.split('_')[0]
+        box = col.split('_')[3]
+        method_name = col.split('_')[1] + '_' + col.split('_')[2]
+        
+        # Create DataFrame for method if it doesn't exist
+        if method_name not in method_dataframes:
+            method_dataframes[method_name] = pd.DataFrame()
+        
+        # Add density data to the corresponding DataFrame
+        method_dataframes[method_name][(temperature, box)] = df[col]
+
+    # Add EWALD data to the corresponding DataFrame
+    method_dataframes["EWALD"] = df_ew
+
+    # Plot each column of the DataFrame in a subfigure
+    for method, data in method_dataframes.items():
+        for column in data.columns:
+            temperature, box = column
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.set_title(f'Method: {method} | Temperature: {temperature} | Box: {box}')
+            ax.set_xlabel('Index')
+            ax.set_ylabel('Density')
+            
+            # Plot each column as a line graph
+            ax.plot(data[column], label=f'Density ({temperature}, {box})')
+            
+            # Plot EWALD density
+            ax.plot(data["EWALD"], label='EWALD Density', linestyle='--', color='red')
+            
+            ax.legend()
+            
+            # Save each subfigure
+            plt.savefig(f'{method}_{temperature}_{box}_subfigure.png', bbox_inches='tight')
+            plt.close()
+
+    print("Subfigures saved successfully!")
+    """
+}
+
+
 process Plot_GOMC_GEMC_Production_VP { 
     cache 'lenient'
     fair true
@@ -3690,6 +3756,7 @@ workflow build_GEMC_system_wolf {
     Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
     Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out,ewald_density_data)
     Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out,ewald_density_data)
+    Plot_GOMC_GEMC_Production_VLE_Per_Density_Line(Collate_GOMC_GEMC_Production.out,ewald_density_data)
 
     Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
     Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
