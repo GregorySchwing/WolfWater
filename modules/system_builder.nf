@@ -3424,6 +3424,16 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
             method_data_box_0[method]['vapor_pressure'].append(df[col].mean())
     
     for idx, col in enumerate(df_ew.columns):
+        if 'BOX_0' in col:
+            temperature = col.split('_')[0]
+            method = "EWALD"
+            if method not in method_data_box_0:
+                method_data_box_0[method] = {'temperature': [], 'vapor_pressure': []}
+            method_data_box_0[method]['temperature'].append(int(temperature))
+            method_data_box_0[method]['vapor_pressure'].append(df_ew[col][0])
+
+
+    for idx, col in enumerate(df_ew.columns):
         if 'BOX_1' in col:
             temperature = col.split('_')[0]
             method = "EWALD"
