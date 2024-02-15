@@ -3449,6 +3449,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density_Line {
     """
     #!/usr/bin/env python
     import pandas as pd
+    import numpy as np
     import matplotlib.pyplot as plt
 
     # Load the CSV file into a pandas DataFrame
