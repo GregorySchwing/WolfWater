@@ -3654,7 +3654,7 @@ workflow build_GEMC_system_wolf {
     Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
     Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
     Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out,ewald_data)
-    Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out)
+    Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out,ewald_data)
 
     Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
     Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
