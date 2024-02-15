@@ -3388,7 +3388,7 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
     input: 
     path(data_csv)
     path(ewald_data_csv, stageAs: "ewald_merged.csv")
-    output: path ("vapor_pressure.png")
+    output: tuple path ("vapor_pressure_box_0.png"), path ("vapor_pressure_box_1.png")
 
     script:
     """
@@ -3460,6 +3460,19 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
             marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
             plt.plot(data['temperature'], data['vapor_pressure'],  label=f'{method} Liquid', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
 
+    plt.xlabel('Temperature', fontsize=18)
+    plt.ylabel('Vapor Pressure', fontsize=18)
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    lgd = plt.legend(by_label.values(), by_label.keys(),fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.title('VLE', fontsize=20)
+
+    # Save the plot as a PNG file
+    plt.savefig('vapor_pressure_box_0.png', bbox_extra_artists=(lgd,), bbox_inches='tight')
+
+    # Plot for Box 1
+    plt.figure(figsize=(10, 6))
+
     plt.plot(method_data_box_1["EWALD"]['temperature'], method_data_box_1["EWALD"]['vapor_pressure'], label=f'EWALD Vapor', linestyle='-', color="black", marker='o', fillstyle="full")
     for method, data in method_data_box_1.items():
         if method != "EWALD":
@@ -3473,11 +3486,17 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
     lgd = plt.legend(by_label.values(), by_label.keys(),fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.title('VLE', fontsize=20)
 
-    # Save the plot as a PNG file
-    plt.savefig('vapor_pressure.png', bbox_extra_artists=(lgd,), bbox_inches='tight')
 
-    # Display the plot
-    plt.show()
+    plt.xlabel('Temperature', fontsize=18)
+    plt.ylabel('Vapor Pressure', fontsize=18)
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    lgd = plt.legend(by_label.values(), by_label.keys(),fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.title('VLE', fontsize=20)
+
+    # Save the plot as a PNG file
+    plt.savefig('vapor_pressure_box_1.png', bbox_extra_artists=(lgd,), bbox_inches='tight')
+
     """
 }
 
