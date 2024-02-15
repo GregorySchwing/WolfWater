@@ -3430,7 +3430,7 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
             if method not in method_data_box_0:
                 method_data_box_0[method] = {'temperature': [], 'vapor_pressure': []}
             method_data_box_0[method]['temperature'].append(int(temperature))
-            method_data_box_0[method]['vapor_pressure'].append(df_ew[col][0])
+            method_data_box_0[method]['vapor_pressure'].append(df_ew[col].mean())
 
 
     for idx, col in enumerate(df_ew.columns):
@@ -3440,7 +3440,7 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
             if method not in method_data_box_1:
                 method_data_box_1[method] = {'temperature': [], 'vapor_pressure': []}
             method_data_box_1[method]['temperature'].append(int(temperature))
-            method_data_box_1[method]['vapor_pressure'].append(df_ew[col][0])
+            method_data_box_1[method]['vapor_pressure'].append(df_ew[col].mean())
 
     # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
     for idx, col in enumerate(df.columns):
