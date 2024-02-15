@@ -419,7 +419,7 @@ process build_two_box_system_already_calibrated {
     if (${params.debugging}):
         gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
     else:
-        gomc_steps_equilibration = 50000000
+        gomc_steps_equilibration = 100000000
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
@@ -2049,7 +2049,7 @@ process write_gemc_ewald_confs {
     if (${params.debugging}):
         gomc_steps_equilibration = 10000 #  set value for paper = 1 * 10**6
     else:
-        gomc_steps_equilibration = 50000000
+        gomc_steps_equilibration = 100000000
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
@@ -2211,7 +2211,7 @@ process write_gemc_ewald_confs_calibrate {
     if (${params.debugging}):
         gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
     else:
-        gomc_steps_equilibration = 50000000
+        gomc_steps_equilibration = 100000000
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
@@ -2410,7 +2410,7 @@ process write_gemc_ewald_calibration_confs {
     if (${params.debugging}):
         gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
     else:
-        gomc_steps_equilibration = 50000000
+        gomc_steps_equilibration = 100000000
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
@@ -2610,7 +2610,7 @@ process write_gemc_production_confs {
     if (${params.debugging}):
         gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
     else:
-        gomc_steps_equilibration = 50000000
+        gomc_steps_equilibration = 100000000
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 1000 # Monte Carlo Steps for pressure calculation
