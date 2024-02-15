@@ -3259,7 +3259,8 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
     fig, axs = plt.subplots(1, num_subplots, figsize=(15, 5))
 
     markers = ['o', 's', '^', 'D', 'v', '<', ]
-    colors = ['red', 'blue', 'green', 'yellow', 'orange', 'purple'],  # Alternating colors
+    colors = ['red', 'blue', 'green', 'yellow', 'orange', 'purple']  
+    # Alternating colors
 
     # Iterate over each subplot
     # Iterate over each subplot
