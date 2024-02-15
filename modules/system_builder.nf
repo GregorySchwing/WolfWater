@@ -3383,7 +3383,9 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
     publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
     cpus 1
     debug false
-    input: path(data_csv)
+    input: 
+    path(data_csv)
+    path(ewald_data_csv, stageAs: "ewald_merged.csv")
     output: path ("vapor_pressure.png")
 
     script:
@@ -3394,6 +3396,7 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
 
     # Load the CSV file into a pandas DataFrame
     df = pd.read_csv("$data_csv", sep='\t')
+    df = pd.read_csv("$ewald_data_csv", sep='\t')
     # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
     method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
         df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
@@ -3417,14 +3420,18 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
                 method_data_box_0[method] = {'temperature': [], 'vapor_pressure': []}
             method_data_box_0[method]['temperature'].append(int(temperature))
             method_data_box_0[method]['vapor_pressure'].append(df[col].mean())
-            if (method == "RAHBARI_DSF"):
-                method = "EWALD"
-                if method not in method_data_box_0:
-                    method_data_box_0[method] = {'temperature': [], 'vapor_pressure': []}
-                method_data_box_0[method]['temperature'].append(int(temperature))
-                method_data_box_0[method]['vapor_pressure'].append(df[col][0])
+    
+    for idx, col in enumerate(df_ew.columns):
+        if 'BOX_1' in col:
+            temperature = col.split('_')[0]
+            method = "EWALD"
+            if method not in method_data_box_1:
+                method_data_box_1[method] = {'temperature': [], 'vapor_pressure': []}
+            method_data_box_1[method]['temperature'].append(int(temperature))
+            method_data_box_1[method]['vapor_pressure'].append(df_ew[col][0])
 
-
+    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
+    for idx, col in enumerate(df.columns):
         if 'BOX_1' in col:
             temperature = col.split('_')[0]
             method = col.split('_')[1] + '_' + col.split('_')[2]
@@ -3433,12 +3440,6 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
                 method_data_box_1[method] = {'temperature': [], 'vapor_pressure': []}
             method_data_box_1[method]['temperature'].append(int(temperature))
             method_data_box_1[method]['vapor_pressure'].append(df[col].mean())
-            if (method == "RAHBARI_DSF"):
-                method = "EWALD"
-                if method not in method_data_box_1:
-                    method_data_box_1[method] = {'temperature': [], 'vapor_pressure': []}
-                method_data_box_1[method]['temperature'].append(int(temperature))
-                method_data_box_1[method]['vapor_pressure'].append(df[col][0])
 
     # Plotting sorted data
     plt.plot(method_data_box_0["EWALD"]['temperature'], method_data_box_0["EWALD"]['vapor_pressure'], label=f'EWALD Liquid', linestyle='-', color="black", marker='o', fillstyle="full")
@@ -3618,12 +3619,13 @@ workflow build_GEMC_system {
     //Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out)
     //Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out)
 
-    //Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production_Replica.out.record)
-    //Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
+    Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production_Replica.out.record)
+    Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
     //Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
     emit:
     restart_files = GOMC_GEMC_Production_Replica.out.restart_files
-    ewald_data = Collate_GOMC_GEMC_Production.out
+    ewald_density_data = Collate_GOMC_GEMC_Production.out
+    ewald_vapor_pressure_data = Collate_GOMC_GEMC_Production_VP.out
 }
 
 
@@ -3644,7 +3646,8 @@ workflow build_GEMC_system_Calibrate {
 workflow build_GEMC_system_wolf {
     take:
     convergenceChannel
-    ewald_data
+    ewald_density_data
+    ewald_vapor_pressure_data
     main:
     methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
     combinedChannel=convergenceChannel.combine(methods)
@@ -3654,12 +3657,12 @@ workflow build_GEMC_system_wolf {
     Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
     Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
     Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
-    Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out,ewald_data)
-    Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out,ewald_data)
+    Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out,ewald_density_data)
+    Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out,ewald_density_data)
 
     Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
     Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
-    Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
+    Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out,ewald_vapor_pressure_data)
     //Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
     //Plot_GOMC_GEMC_Production_VLE_Per_Density_VP(Collate_GOMC_GEMC_Production_VP.out)
 
