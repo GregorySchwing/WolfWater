@@ -3472,6 +3472,11 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density_Line {
     for idx, col in enumerate(df.columns):
         temperature = col.split('_')[0]
         method = col.split('_')[1] + '_' + col.split('_')[2]
+        if 'BOX_0' in col:
+            box = 0
+
+        if 'BOX_1' in col:
+            box = 1
 
         # Create DataFrame for method if it doesn't exist
         if method not in method_dataframes:
