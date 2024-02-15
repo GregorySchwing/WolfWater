@@ -2854,6 +2854,112 @@ process Extract_Density_GOMC_GEMC_Production {
 }
 
 
+process Extract_Volume_GOMC_GEMC_Production {
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/methods/${METHOD}/extracted/density", mode: 'copy', overwrite: false
+    cpus 1
+    debug false
+    input:
+    tuple val(temp_K),val(METHOD),path(logfile)
+    output:
+    tuple path("${temp_K}_${METHOD}_BOX_0.csv"),path("${temp_K}_${METHOD}_BOX_1.csv"),\
+    emit: analysis
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import re
+    import os
+    import numpy as np
+    from pathlib import Path
+    def extract(filename,regex_pattern):
+
+        EnRegex = re.compile(regex_pattern)
+        print('extract_target',filename, 'pattern',regex_pattern)
+        steps = []
+        densities = []
+        try:
+            with open(filename, 'r') as f:
+                for line in f:
+                    if EnRegex.match(line):
+                        try:
+                            steps.append(float(line.split()[1]))
+                            densities.append(float(line.split()[2]))
+                        except:
+                            print(line)
+                            print("An exception occurred") 
+        except:
+            print("Cant open",filename) 
+        steps_np = np.array(steps)
+        densities_np = np.array(densities)
+        return steps_np, densities_np
+
+    steps_box_0, densities_box_0 = extract("$logfile","STAT_0")
+    df = pd.DataFrame(densities_box_0, index=None, columns=['${temp_K}_${METHOD}_BOX_0'])
+    df.to_csv("${temp_K}_${METHOD}_BOX_0.csv", header=True, sep=' ', index=False)
+
+    steps_box_1, densities_box_1 = extract("$logfile","STAT_1")
+    df = pd.DataFrame(densities_box_1, index=None, columns=['${temp_K}_${METHOD}_BOX_1'])
+    df.to_csv("${temp_K}_${METHOD}_BOX_1.csv", header=True, sep=' ', index=False)
+    """
+}
+
+
+process Extract_Mol_Number_GOMC_GEMC_Production {
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/methods/${METHOD}/extracted/density", mode: 'copy', overwrite: false
+    cpus 1
+    debug false
+    input:
+    tuple val(temp_K),val(METHOD),path(logfile)
+    output:
+    tuple path("${temp_K}_${METHOD}_BOX_0.csv"),path("${temp_K}_${METHOD}_BOX_1.csv"),\
+    emit: analysis
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import re
+    import os
+    import numpy as np
+    from pathlib import Path
+    def extract(filename,regex_pattern):
+
+        EnRegex = re.compile(regex_pattern)
+        print('extract_target',filename, 'pattern',regex_pattern)
+        steps = []
+        densities = []
+        try:
+            with open(filename, 'r') as f:
+                for line in f:
+                    if EnRegex.match(line):
+                        try:
+                            steps.append(float(line.split()[1]))
+                            densities.append(float(line.split()[7]))
+                        except:
+                            print(line)
+                            print("An exception occurred") 
+        except:
+            print("Cant open",filename) 
+        steps_np = np.array(steps)
+        densities_np = np.array(densities)
+        return steps_np, densities_np
+
+    steps_box_0, densities_box_0 = extract("$logfile","STAT_0")
+    df = pd.DataFrame(densities_box_0, index=None, columns=['${temp_K}_${METHOD}_BOX_0'])
+    df.to_csv("${temp_K}_${METHOD}_BOX_0.csv", header=True, sep=' ', index=False)
+
+    steps_box_1, densities_box_1 = extract("$logfile","STAT_1")
+    df = pd.DataFrame(densities_box_1, index=None, columns=['${temp_K}_${METHOD}_BOX_1'])
+    df.to_csv("${temp_K}_${METHOD}_BOX_1.csv", header=True, sep=' ', index=False)
+    """
+}
+
+
 process Collate_GOMC_GEMC_Production { 
     cache 'lenient'
     fair true
@@ -2929,6 +3035,39 @@ process Collate_GOMC_GEMC_Production_VP {
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
+    cpus 1
+    debug false
+    input: path("*")
+    output: path("merged_data.csv")
+
+    shell:
+    """
+    paste * > merged_data.csv
+    """
+}
+
+
+process Collate_GOMC_GEMC_Production_Vol { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/volume", mode: 'copy', overwrite: false
+    cpus 1
+    debug false
+    input: path("*")
+    output: path("merged_data.csv")
+
+    shell:
+    """
+    paste * > merged_data.csv
+    """
+}
+
+process Collate_GOMC_GEMC_Production_Mol_Number { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/volume", mode: 'copy', overwrite: false
     cpus 1
     debug false
     input: path("*")
@@ -3308,6 +3447,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density_Line {
 
     script:
     """
+    #!/usr/bin/env python
     import pandas as pd
     import matplotlib.pyplot as plt
 
@@ -3315,36 +3455,46 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density_Line {
     df = pd.read_csv("$data_csv", sep='\t')
     df_ew = pd.read_csv("$ewald_data_csv", sep='\t')
 
-    # Create a dictionary to store DataFrames for each method
+    # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
+    method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
+        df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
+        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h','s',],
+        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':','-'],  # Different line styles        
+        ['full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full'],  # Alternating fill pattern
+        ['red', 'red', 'blue', 'blue', 'green', 'yellow', 'orange', 'green', 'green', 'grey', 'purple'],  # Alternating colors
+    )}
+    method_data = {}
     method_dataframes = {}
+    # Plot for Box 0
+    plt.figure(figsize=(10, 6))
 
-    # Iterate over each column in df and df_ew
-    for col in df.columns:
+    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
+    for idx, col in enumerate(df.columns):
         temperature = col.split('_')[0]
-        box = col.split('_')[3]
-        method_name = col.split('_')[1] + '_' + col.split('_')[2]
-        
+        method = col.split('_')[1] + '_' + col.split('_')[2]
+
         # Create DataFrame for method if it doesn't exist
-        if method_name not in method_dataframes:
-            method_dataframes[method_name] = pd.DataFrame()
-        
+        if method not in method_dataframes:
+            method_dataframes[method] = pd.DataFrame()
+
         # Add density data to the corresponding DataFrame
-        method_dataframes[method_name][(temperature, box)] = df[col]
+        method_dataframes[method_name][f'{temperature}_{box}'] = df[col]
+
 
     # Add EWALD data to the corresponding DataFrame
     method_dataframes["EWALD"] = df_ew
 
+    import matplotlib.pyplot as plt
     # Plot each column of the DataFrame in a subfigure
     for method, data in method_dataframes.items():
         for column in data.columns:
-            temperature, box = column
             fig, ax = plt.subplots(figsize=(10, 6))
-            ax.set_title(f'Method: {method} | Temperature: {temperature} | Box: {box}')
+            ax.set_title(f'Method: {method} | Temperature and Box: {column}')
             ax.set_xlabel('Index')
             ax.set_ylabel('Density')
             
             # Plot each column as a line graph
-            ax.plot(data[column], label=f'Density ({temperature}, {box})')
+            ax.plot(data[column], label=f'Density ({column})')
             
             # Plot EWALD density
             ax.plot(data["EWALD"], label='EWALD Density', linestyle='--', color='red')
@@ -3352,7 +3502,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density_Line {
             ax.legend()
             
             # Save each subfigure
-            plt.savefig(f'{method}_{temperature}_{box}_subfigure.png', bbox_inches='tight')
+            plt.savefig(f'{method}_{column}_subfigure.png', bbox_inches='tight')
             plt.close()
 
     print("Subfigures saved successfully!")
@@ -3719,10 +3869,14 @@ workflow build_GEMC_system {
     Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production_Replica.out.record)
     Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
     //Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
+
+    Extract_Volume_GOMC_GEMC_Production(GOMC_GEMC_Production_Replica.out.record)
+    Extract_Volume_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_Vol
     emit:
     restart_files = GOMC_GEMC_Production_Replica.out.restart_files
     ewald_density_data = Collate_GOMC_GEMC_Production.out
     ewald_vapor_pressure_data = Collate_GOMC_GEMC_Production_VP.out
+    ewald_vol_data = Collate_GOMC_GEMC_Production_Vol.out
 }
 
 
@@ -3745,6 +3899,7 @@ workflow build_GEMC_system_wolf {
     convergenceChannel
     ewald_density_data
     ewald_vapor_pressure_data
+    ewald_vol_data
     main:
     methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
     combinedChannel=convergenceChannel.combine(methods)
@@ -3757,6 +3912,11 @@ workflow build_GEMC_system_wolf {
     Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out,ewald_density_data)
     Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out,ewald_density_data)
     Plot_GOMC_GEMC_Production_VLE_Per_Density_Line(Collate_GOMC_GEMC_Production.out,ewald_density_data)
+
+    Extract_Volume_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
+    Extract_Volume_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_Vol
+    Plot_GOMC_GEMC_Production_VLE_Per_Density_Line(Collate_GOMC_GEMC_Production_Vol.out,ewald_vol_data)
+
 
     Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
     Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
