@@ -3502,7 +3502,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density_Line {
             ax.plot(data[column], label=f'Density ({column})')
             
             # Plot EWALD density
-            ax.plot(data["EWALD"], label='EWALD Density', linestyle='--', color='red')
+            ax.plot(method_dataframes["EWALD"][column], label='EWALD Density', linestyle='--', color='red')
             
             ax.legend()
             
