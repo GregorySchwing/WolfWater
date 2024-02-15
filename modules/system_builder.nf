@@ -3199,7 +3199,9 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
     publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
     cpus 1
     debug false
-    input: path(data_csv)
+    input: 
+    path(data_csv)
+    path(ewald_data_csv, stageAs: "ewald_merged.csv")
     output: path ("per_density.png")
 
     script:
@@ -3210,6 +3212,8 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
 
     # Load the CSV file into a pandas DataFrame
     df = pd.read_csv("$data_csv", sep='\t')
+    df_ew = pd.read_csv("$ewald_data_csv", sep='\t')
+
     # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
     method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
         df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
@@ -3231,12 +3235,13 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
             method_data[method] = {'temperature': [], 'density': []}
         method_data[method]['temperature'].append(int(temperature))
         method_data[method]['density'].append(df[col].mean())
-        if (method == "RAHBARI_DSF"):
-            method = "EWALD"
-            if method not in method_data:
-                method_data[method] = {'temperature': [], 'density': []}
-            method_data[method]['temperature'].append(int(temperature))
-            method_data[method]['density'].append(df[col][0])
+    for idx, col in enumerate(df_ew.columns):
+        temperature = col.split('_')[0]
+        method = "EWALD"
+        if method not in method_data:
+            method_data[method] = {'temperature': [], 'density': []}
+        method_data[method]['temperature'].append(int(temperature))
+        method_data[method]['density'].append(df_ew[col][0])
 
     # Sort temperature and density lists for each method by density
     for method, data in method_data.items():
@@ -3274,7 +3279,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
                 ew_dens = data['density'][i]
         # Plotting bar chart for each method
         #axs[i].bar(methods, densities, color='blue')
-        axs[i].scatter(methods, densities)
+        axs[i].scatter(methods, densities, c=colors)
         axs[i].axhline(y=ew_dens, color="black", linestyle='--', linewidth=2)
     # Save the plot as a PNG file
     plt.savefig('per_density.png', bbox_inches='tight')
