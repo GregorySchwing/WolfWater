@@ -3398,7 +3398,7 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
 
     # Load the CSV file into a pandas DataFrame
     df = pd.read_csv("$data_csv", sep='\t')
-    df = pd.read_csv("$ewald_data_csv", sep='\t')
+    df_ew = pd.read_csv("$ewald_data_csv", sep='\t')
     # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
     method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
         df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
