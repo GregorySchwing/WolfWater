@@ -521,9 +521,11 @@ process build_two_box_system_already_calibrated {
     file1 = open("in_GEMC_NVT.conf", "a")
     defAlphaLine = "{box}\\t{val}\\n".format(box="Wolf", val="True")
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfKind", val=kind_pot[0])
-    file1.writelines(defAlphaLine)
-    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfPotential", val=kind_pot[1])
+    #defAlphaLine = "{box}\\t{val}\\n".format(box="WolfKind", val=kind_pot[0])
+    #file1.writelines(defAlphaLine)
+    #defAlphaLine = "{box}\\t{val}\\n".format(box="WolfPotential", val=kind_pot[1])
+    #file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="DSF", val=kind_pot[1]=="DSF")
     file1.writelines(defAlphaLine)
     defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=convergence_obj.models["${METHOD}"][0].ConvergedAlpha)
     file1.writelines(defAlphaLine)
@@ -3928,7 +3930,9 @@ workflow build_GEMC_system_wolf {
     ewald_vapor_pressure_data
     ewald_vol_data
     main:
-    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
+    //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
+    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
+
     combinedChannel=convergenceChannel.combine(methods)
     build_two_box_system_already_calibrated(combinedChannel)
     GOMC_GEMC_Production_Input_Channel = build_two_box_system_already_calibrated.out.system
