@@ -3931,7 +3931,7 @@ workflow build_GEMC_system_wolf {
     ewald_vol_data
     main:
     //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
-    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
+    methods = Channel.of( "RAHBARI_DSF" )
 
     combinedChannel=convergenceChannel.combine(methods)
     build_two_box_system_already_calibrated(combinedChannel)
