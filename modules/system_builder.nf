@@ -938,10 +938,6 @@ process build_two_box_system_wolf {
     file1.writelines(defAlphaLine)
     defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="1", val=convergence_obj.models["${METHOD}"][1].ConvergedAlpha)
     file1.writelines(defAlphaLine)
-
-    #defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="${chk}")
-    #file1.writelines(defAlphaLine)
-
     """
 }
 
