@@ -82,7 +82,7 @@ log.info """\
 
         // Create a channel with the CSV file
         csv_channel = channel.fromPath(input_csv)
-        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 14,quote:'"').map { 
+        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 2,quote:'"').map { 
             row -> [row.temp_K, row.P_bar, row.No_mol, row.Rho_kg_per_m_cubed, row.L_m_if_cubed, row.RcutCoulomb]
         }
         //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
@@ -113,6 +113,9 @@ log.info """\
         }
         gemc_system_input = convergenceChannelFlattened.combine(solvent_xml_channel)   
         build_GEMC_system(gemc_system_input)
+        calibrate_wrapper(gemc_system_input,build_GEMC_system.out.ewald_density_data)
+
+        return
         tempAndDensity = convergenceChannel.map { tuple ->
             def temperature = tuple[0]
             def densities = tuple[1]
