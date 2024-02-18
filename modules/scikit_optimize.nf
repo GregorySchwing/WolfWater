@@ -601,6 +601,28 @@ process tell_points {
     mean_ref = df_ref.mean()
     print(mean_trial.head())
     print(mean_ref.head())
+
+    df1 = mean_ref.filter(like='${temp_K}')
+    first_value_col1 = df1.iloc[0]
+    first_value_col2 = df1.iloc[1]
+    print(df1.head())
+
+    # Function to calculate MSE
+    def calculate_mse(col1, col2):
+        return ((col1 - col2) ** 2).mean()
+
+    # Calculate MSE for each pair of columns in mean_trial compared to df1
+    mse_results = {}
+    num_columns_df2 = len(mean_trial)
+    for i in range(0, num_columns_df2, 2):
+        col1 = mean_trial.iloc[i]
+        col2 = mean_trial.iloc[i+1]
+        col_name = int(i / 2)  # Evaluate the division directly
+        mse_results[col_name] = calculate_mse(first_value_col1, col1) + calculate_mse(first_value_col2, col2)
+    # Create DataFrame from MSE results
+    mse_df = pd.DataFrame.from_dict(mse_results, orient='index', columns=['MSE'])
+    print(mse_df)
+
     with open("log.txt", 'w') as sys.stdout:
         from skopt import Optimizer
         import pickle
