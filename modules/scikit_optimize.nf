@@ -6,8 +6,9 @@ nextflow.enable.dsl=2
 process initialize_model {
     container "${params.container__scikit_optimize}"
     publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/", mode: 'copy', overwrite: true
+    cache 'lenient'
+    fair true
 
-    debug false
     input:
     tuple val(temp_K), val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), \
     path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json"), \
@@ -252,7 +253,7 @@ process build_two_box_system {
     # calc MC steps for gomc equilb
     # number of simulation steps
     if (${params.debugging}):
-        gomc_steps_equilibration = 10000 #  set value for paper = 1 * 10**6
+        gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
     else:
         gomc_steps_equilibration = 100000000
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
@@ -334,9 +335,9 @@ process build_two_box_system {
                                                             "EqSteps": EqSteps,
                                                             "AdjSteps":AdjSteps,
                                                             "PressureCalc": [True, pressure_calc_freq],
-                                                            "RestartFreq": [True, restart_output_freq],
-                                                            "CheckpointFreq": [True, restart_output_freq],
-                                                            "DCDFreq": [True, coordinate_output_freq],
+                                                            "RestartFreq": output_false_list_input,
+                                                            "CheckpointFreq": output_false_list_input,
+                                                            "DCDFreq": output_false_list_input,
                                                             "ConsoleFreq": [True, console_output_freq],
                                                             "BlockAverageFreq":[True, block_ave_output_freq],
                                                             "HistogramFreq": output_false_list_input,
@@ -356,6 +357,8 @@ process ask_points {
     container "${params.container__scikit_optimize}"
     publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/ask", mode: 'copy', overwrite: true
     debug false
+    cache 'lenient'
+    fair true
     input:
     tuple val(temp_K), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp), \
     path(xsc1), path(coor1), path(xsc2), path(coor2), path(conf),\
@@ -416,7 +419,8 @@ process ask_points {
 process append_parameters_to_conf {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/append_parameters_to_conf/${json.baseName}", mode: 'copy', overwrite: true
-
+    cache 'lenient'
+    fair true
     debug false
     input:
     tuple val(temp_K), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp), \
@@ -469,11 +473,13 @@ process append_parameters_to_conf {
 
 
 process GOMC_GEMC_Production_Replica {
-    //cache 'lenient'
+    // Important to allow for bad points
+    // If GOMC doesn't finish, the objective function will be minimal.
+    errorStrategy 'ignore'
+    cache 'lenient'
     fair true
     container "${params.container__gomc}"
     publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/production/${json.baseName}", mode: 'copy', overwrite: true
-
     cpus 8
     debug false
     input:
@@ -481,18 +487,7 @@ process GOMC_GEMC_Production_Replica {
     path(xsc1), path(coor1), path(xsc2), path(coor2), path(conf), val(iteration),\
     path(json), val(json_id), path(gemc_conf)
     output:
-    //path("*"), emit: grids
-    tuple val(temp_K),\
-    path("GOMC_GEMC_Production_BOX_0_restart.xsc"),\
-    path("GOMC_GEMC_Production_BOX_1_restart.xsc"),\
-    path("GOMC_GEMC_Production_BOX_0_restart.coor"),\
-    path("GOMC_GEMC_Production_BOX_1_restart.coor"),\
-    path("GOMC_GEMC_Production_BOX_0_restart.pdb"),\
-    path("GOMC_GEMC_Production_BOX_1_restart.pdb"),\
-    path("GOMC_GEMC_Production_BOX_0_restart.psf"),\
-    path("GOMC_GEMC_Production_BOX_1_restart.psf"),\
-    path("GOMC_GEMC_Production_restart.chk"),  emit: restart_files
-    tuple val(temp_K), path("GOMC_GEMC_Production.log"),  emit: record
+    tuple val(temp_K), val(iteration), val(json_id), path(json), path("GOMC_GEMC_Production.log"),  emit: record
     shell:
     """
     
@@ -502,6 +497,146 @@ process GOMC_GEMC_Production_Replica {
     """
 }
 
+
+process Extract_Density_GOMC_GEMC_Production {
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/density/${json.baseName}", mode: 'copy', overwrite: true
+
+    cpus 1
+    debug false
+    input:
+    tuple val(temp_K), val(iteration), val(json_id), path(json), path(logfile)
+    output:
+    tuple val(temp_K),val(iteration), \
+    path("${temp_K}_${iteration}_${json_id}_COMBINED.csv"),\
+    emit: analysis
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import re
+    import os
+    import numpy as np
+    from pathlib import Path
+    def extract(filename,regex_pattern):
+
+        EnRegex = re.compile(regex_pattern)
+        print('extract_target',filename, 'pattern',regex_pattern)
+        steps = []
+        densities = []
+        try:
+            with open(filename, 'r') as f:
+                for line in f:
+                    if EnRegex.match(line):
+                        try:
+                            steps.append(float(line.split()[1]))
+                            densities.append(float(line.split()[8]))
+                        except:
+                            print(line)
+                            print("An exception occurred") 
+        except:
+            print("Cant open",filename) 
+        steps_np = np.array(steps)
+        densities_np = np.array(densities)
+        return steps_np, densities_np
+
+    steps_box_0, densities_box_0 = extract("$logfile","STAT_0")
+    df1 = pd.DataFrame(densities_box_0, index=None, columns=['${temp_K}_${iteration}_${json_id}_BOX_0'])
+    #df.to_csv("${temp_K}_${iteration}_${json_id}_BOX_0.csv", header=True, sep=' ', index=False)
+
+    steps_box_1, densities_box_1 = extract("$logfile","STAT_1")
+    df2 = pd.DataFrame(densities_box_1, index=None, columns=['${temp_K}_${iteration}_${json_id}_BOX_1'])
+    #df.to_csv("${temp_K}_${iteration}_${json_id}_BOX_1.csv", header=True, sep=' ', index=False)
+
+    # Concatenate both dataframes
+    df_combined = pd.concat([df1, df2], axis=1)
+
+    # Save to CSV
+    df_combined.to_csv("${temp_K}_${iteration}_${json_id}_COMBINED.csv", header=True, sep=' ', index=False)
+    """
+}
+
+
+process Collate_GOMC_GEMC_Production { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/merged/", mode: 'copy', overwrite: true
+    cpus 1
+    debug false
+    input: tuple val(temp_K), val(iteration), path("*")
+    output: path("merged_data.csv")
+
+    shell:
+    """
+    paste * > merged_data.csv
+    """
+}
+
+
+process tell_points {
+    container "${params.container__scikit_optimize}"
+    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/ask", mode: 'copy', overwrite: true
+    debug false
+    cache 'lenient'
+    fair true
+    input:
+    tuple val(temp_K), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp), \
+    path(xsc1), path(coor1), path(xsc2), path(coor2), path(conf),\
+    path(scikit_optimize_model), val(iteration)
+    output:
+    tuple val(temp_K), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp), \
+    path(xsc1), path(coor1), path(xsc2), path(coor2), path(conf), val(iteration),\
+    path("*.json"), emit: systems
+    tuple val(temp_K), path("current_scikit_optimize_model.pkl"), val(iteration), emit: mdl
+    tuple val(temp_K), path("*.json"), emit: json
+    script:
+    """
+    #!/usr/bin/env python
+    # for python3
+    import sys
+    from typing import List
+    from pydantic import BaseModel
+
+    class Point(BaseModel):
+        alpha_box_0: float
+        rcc_box_0: float
+        alpha_box_1: float
+        rcc_box_1: float
+
+    with open("log.txt", 'w') as sys.stdout:
+        from skopt import Optimizer
+        import pickle
+        import numpy as np
+        np.int = np.int64
+        
+        with open("${scikit_optimize_model}", 'rb') as f:
+            opt = pickle.load(f)
+        f.close()
+
+        print("n_initial_points/batch size=",${params.batch_size})
+
+        pointsList = opt.ask(n_points=int(${params.batch_size}))
+
+        for count, value in enumerate(pointsList):
+            # Create a Pydantic object
+            point_obj = Point(alpha_box_0=value[0],\
+                                rcc_box_0=value[1],\
+                                alpha_box_1=value[2],\
+                                rcc_box_1=value[3])
+
+            # Serialize the Pydantic object to JSON
+            with open(f"{count}.json", 'w') as file:
+                file.write(point_obj.json())
+
+        with open("current_scikit_optimize_model.pkl", 'wb') as f:
+            pickle.dump(opt, f)
+        f.close()
+
+    """
+}
 
 workflow initialize_scikit_optimize_model {
     take:
@@ -539,11 +674,17 @@ workflow calibrate_wrapper {
     models = initialize_model(gemc_system_input)
     build_two_box_system(gemc_system_input)
     f = build_two_box_system.out.system.join(models.scikit_optimize_model)
+    
     ask_points(f)
     append_parameters_to_conf(ask_points.out.systems.transpose())
     GOMC_GEMC_Production_Replica(append_parameters_to_conf.out)
-    //calibrate.recurse(f).times(3)
-    //emit:
-    //points = ask.out.points
+    Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production_Replica.out.record)
+    collectedPoints = Extract_Density_GOMC_GEMC_Production.out.analysis.groupTuple(by:[0,1],size:params.batch_size,remainder:false,sort:true)
+    sorted=collectedPoints.map { prefix1, prefix2, tbi -> tuple( prefix1, prefix2, tbi.sort{it.name}) }
+    sorted.view()
+    Collate_GOMC_GEMC_Production(sorted)
+    //tellPointsInput = ask_points.out.mdl.join(collectedPoints, by:[0,1])
+    //tellPointsInput.view()
+
 
 }
