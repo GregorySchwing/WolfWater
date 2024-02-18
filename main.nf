@@ -125,7 +125,7 @@ log.info """\
         //gemc_wolf_production_input = tempAndDensity.join(build_GEMC_system.out.restart_files).join(build_GEMC_system_Calibrate.out.convergence).combine(solvent_xml_channel)
         convergenceChannelFlattened.view()
         build_GEMC_system_Calibrate.out.convergence.view()
-        gemc_wolf_production_input = convergenceChannelFlattened.join(by: [0], build_GEMC_system_Calibrate.out.convergence).combine(solvent_xml_channel)
+        gemc_wolf_production_input = convergenceChannelFlattened.join(build_GEMC_system_Calibrate.out.convergence)
         gemc_wolf_production_input.view()
         return
         build_GEMC_system_wolf(gemc_wolf_production_input,build_GEMC_system.out.ewald_density_data,build_GEMC_system.out.ewald_vapor_pressure_data,build_GEMC_system.out.ewald_vol_data)
