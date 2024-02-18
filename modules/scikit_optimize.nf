@@ -367,8 +367,9 @@ process ask_points {
     tuple val(temp_K), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp), \
     path(xsc1), path(coor1), path(xsc2), path(coor2), path(conf), val(iteration),\
     path("*.json"), emit: systems
-    tuple val(temp_K), val(iteration), path("current_scikit_optimize_model.pkl"), emit: mdl
+    tuple val(temp_K), val(iteration), path(scikit_optimize_model), emit: mdl
     tuple val(temp_K), path("*.json"), emit: json
+    path("current_scikit_optimize_model.pkl"), emit: curr_mdl
     script:
     """
     #!/usr/bin/env python
@@ -586,6 +587,9 @@ process tell_points {
     tuple val(temp_K), val(iteration), path(scikit_optimize_model), path(trial_data, stageAs: "trial_data.csv")
     path(ref_data)
     output:
+    path("log.txt")
+    tuple val(temp_K), val(iteration), path("current_scikit_optimize_model.pkl"), emit: curr_mdl
+
     script:
     """
     #!/usr/bin/env python
@@ -594,6 +598,7 @@ process tell_points {
     from typing import List
     from pydantic import BaseModel
     import pandas as pd
+    import numpy as np
     print("Hello from ${temp_K} ${iteration}")
     df_trial = pd.read_csv("$trial_data", delim_whitespace=True)
     df_ref = pd.read_csv("$ref_data", delim_whitespace=True)
@@ -622,7 +627,8 @@ process tell_points {
     # Create DataFrame from MSE results
     mse_df = pd.DataFrame.from_dict(mse_results, orient='index', columns=['MSE'])
     print(mse_df)
-
+    y = mse_df.values.flatten().tolist()
+    print(y)
     with open("log.txt", 'w') as sys.stdout:
         from skopt import Optimizer
         import pickle
@@ -634,6 +640,16 @@ process tell_points {
         f.close()
 
         print("Hello from ${temp_K} ${iteration}")
+
+        print("n_initial_points/batch size=",${params.batch_size})
+
+        x = opt.ask(n_points=int(${params.batch_size}))
+        print(x)
+        print(y)
+        opt.tell(x,y)
+        with open("current_scikit_optimize_model.pkl", 'wb') as f:
+            pickle.dump(opt, f)
+        f.close()
 
     """
 }
