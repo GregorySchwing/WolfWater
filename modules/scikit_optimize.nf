@@ -474,7 +474,7 @@ process append_parameters_to_conf {
 
 process GOMC_GEMC_Production_Replica {
     // Important to allow for bad points
-    // If GOMC doesn't finish, the objective function will be minimal.
+    // If GOMC doesn't finish, the objective function will be bad.
     errorStrategy 'ignore'
     cache 'lenient'
     fair true
@@ -595,8 +595,8 @@ process tell_points {
     from pydantic import BaseModel
     import pandas as pd
     print("Hello from ${temp_K} ${iteration}")
-    df_trial = pd.read_csv("$trial_data", sep='\t')
-    df_ref = pd.read_csv("$ref_data", sep='\t')
+    df_trial = pd.read_csv("$trial_data", delim_whitespace=True)
+    df_ref = pd.read_csv("$ref_data", delim_whitespace=True)
     mean_trial = df_trial.mean()
     mean_ref = df_ref.mean()
     print(mean_trial.head())
@@ -661,7 +661,6 @@ workflow calibrate_wrapper {
     sorted=collectedPoints.map { prefix1, prefix2, tbi -> tuple( prefix1, prefix2, tbi.sort{it.name}) }
     Collate_GOMC_GEMC_Production(sorted)
     tellPointsInput = ask_points.out.mdl.join(Collate_GOMC_GEMC_Production.out, by:[0,1])
-    tellPointsInput.view()
     tell_points(tellPointsInput,ewald_density_data)
 
 }
