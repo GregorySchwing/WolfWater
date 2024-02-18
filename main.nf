@@ -123,6 +123,8 @@ log.info """\
         gemc_calibration_input = tempAndDensity.join(build_GEMC_system.out.restart_files).combine(solvent_xml_channel)
         build_GEMC_system_Calibrate(gemc_calibration_input)
         //gemc_wolf_production_input = tempAndDensity.join(build_GEMC_system.out.restart_files).join(build_GEMC_system_Calibrate.out.convergence).combine(solvent_xml_channel)
+        convergenceChannelFlattened.view()
+        build_GEMC_system_Calibrate.out.convergence.view()
         gemc_wolf_production_input = convergenceChannelFlattened.join(by: [0,1,2], build_GEMC_system_Calibrate.out.convergence).combine(solvent_xml_channel)
         gemc_wolf_production_input.view()
         return
