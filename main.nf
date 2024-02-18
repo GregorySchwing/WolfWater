@@ -4,7 +4,7 @@
 nextflow.enable.dsl=2
 
 // Using recursion
-// nextflow.preview.recursion=true
+nextflow.preview.recursion=true
 
 // All of the default parameters are being set in `nextflow.config`
 
@@ -17,6 +17,7 @@ include { train_model } from './modules/model_builder'
 include { predict_model } from './modules/model_builder'
 include { initialize_scikit_optimize_model } from './modules/scikit_optimize'
 include { calibrate_wrapper } from './modules/scikit_optimize'
+include { calibrate_recursive } from './modules/scikit_optimize'
 
 
 // Function which prints help message text
@@ -82,7 +83,7 @@ log.info """\
 
         // Create a channel with the CSV file
         csv_channel = channel.fromPath(input_csv)
-        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 2,quote:'"').map { 
+        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 4,quote:'"').map { 
             row -> [row.temp_K, row.P_bar, row.No_mol, row.Rho_kg_per_m_cubed, row.L_m_if_cubed, row.RcutCoulomb]
         }
         //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
@@ -114,7 +115,23 @@ log.info """\
         gemc_system_input = convergenceChannelFlattened.combine(solvent_xml_channel)   
         build_GEMC_system(gemc_system_input)
         calibrate_wrapper(gemc_system_input,build_GEMC_system.out.ewald_density_data)
-
+        GEMC_Recursive = solventData.groupTuple(by:0,size:2,remainder:false)
+        GEMC_RecursiveFlattened = GEMC_Recursive.map { tuple ->
+            def temperature = tuple[0]
+            def pressures = tuple[1]
+            def num_mol = tuple[2]
+            def densities = tuple[3]
+            def box_length = tuple[4]
+            def rcut = tuple[5]
+            // Customize this part based on your specific requirements
+            return [temperature, densities[0], densities[1], \
+            num_mol[0], num_mol[1], box_length[0], box_length[1],\
+            rcut[0],rcut[1]]
+        }
+        GEMC_RecursiveFlattened.view()
+        iteration = Channel.value(0)
+        resultFile = file(params.output_file)
+        calibrate_recursive.recurse(iteration,resultFile,build_GEMC_system.out.ewald_density_data).times(2)
         return
         tempAndDensity = convergenceChannel.map { tuple ->
             def temperature = tuple[0]
@@ -128,6 +145,8 @@ log.info """\
         //gemc_wolf_production_input = tempAndDensity.join(build_GEMC_system.out.restart_files).join(build_GEMC_system_Calibrate.out.convergence).combine(solvent_xml_channel)
         gemc_wolf_production_input = convergenceChannelFlattened.join(by: [0], build_GEMC_system_Calibrate.out.convergence).combine(solvent_xml_channel)
         build_GEMC_system_wolf(gemc_wolf_production_input,build_GEMC_system.out.ewald_density_data,build_GEMC_system.out.ewald_vapor_pressure_data,build_GEMC_system.out.ewald_vol_data)
+        
+    
         return
 
         skopt_model = initialize_scikit_optimize_model(build_NVT_system.out.system)

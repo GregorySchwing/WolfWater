@@ -353,6 +353,247 @@ process build_two_box_system {
 
 }
 
+
+process build_two_box_system_from_scratch {
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/iteration_${iteration}_gemc/input", mode: 'copy', overwrite: false
+    cpus 1
+
+    debug false
+    input:
+    tuple val(temp_K), val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), \
+    val(No_mol1), val(No_mol2), val(L_m_if_cubed1), val(L_m_if_cubed2),\
+    path(path_to_xml)
+    val(iteration)
+    output:
+    tuple val(temp_K), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
+    path("in_GEMC_NVT1.conf"), path("in_GEMC_NVT2.conf"), emit: system
+    script:
+    """
+    #!/usr/bin/env python
+    print("hello from ", $temp_K, $Rho_kg_per_m_cubed1,$Rho_kg_per_m_cubed2)
+
+    # GOMC Example for the NVT Ensemble using MoSDeF [1, 2, 5-10, 13-17]
+
+    # Import the required packages and specify the force field (FF),
+    # box dimensions, density, and mol ratios [1, 2, 5-10, 13-17].
+
+    import mbuild as mb
+    import unyt as u
+    from mosdef_gomc.formats import charmm_writer as mf_charmm
+    from mosdef_gomc.formats.charmm_writer import Charmm
+    import mosdef_gomc.formats.gomc_conf_writer as gomc_control
+    
+    from   mbuild.lib.molecules.water import WaterSPC
+    import foyer
+
+    forcefield_file_water = "${path_to_xml}"
+
+    liquid_box_length_Ang = ${L_m_if_cubed1}
+
+    temperature = ${temp_K}
+    
+
+    water = WaterSPC()
+    water.name = 'SPCE'
+
+    molecule_list = [water]
+    residues_list = [water.name]
+    fixed_bonds_angles_list = [water.name]
+
+    ## Build the main liquid simulation box (box 0) for the simulation [1, 2, 13-17]
+
+    liquid_water_box = mb.fill_box(compound=molecule_list,
+                                        n_compounds=int(${No_mol1}),
+                                        box=[liquid_box_length_Ang / 10,
+                                            liquid_box_length_Ang / 10,
+                                            liquid_box_length_Ang / 10]
+                                        )
+
+    vapor_box_length_Ang = ${L_m_if_cubed2}
+
+    vapor_water_box = mb.fill_box(compound=molecule_list,
+                                        n_compounds=int(${No_mol2}),
+                                        box=[vapor_box_length_Ang / 10,
+                                            vapor_box_length_Ang / 10,
+                                            vapor_box_length_Ang / 10]
+                                        )
+
+    # Destroys water angles!!! Since GOMC is rigid water, dont use this.
+    #water_box.energy_minimize(forcefield=forcefield_file_water , steps=10**5 )
+    # Build the Charmm object, which is required to write the
+    # FF (.inp), psf, pdb, and GOMC control files [1, 2, 5-10, 13-17]
+
+    charmm = mf_charmm.Charmm(liquid_water_box,
+                            'system_liq',
+                            structure_box_1=vapor_water_box,
+                            filename_box_1='system_vap',
+                            ff_filename="system",
+                            forcefield_selection=forcefield_file_water,
+                            residues= residues_list,
+                            gomc_fix_bonds_angles=fixed_bonds_angles_list
+                            )
+
+    charmm.write_inp()
+
+    charmm.write_psf()
+
+    charmm.write_pdb()
+
+    from typing import List
+    print("hello from ", $temp_K )
+
+    import mbuild as mb
+    import unyt as u
+    from mosdef_gomc.formats import charmm_writer as mf_charmm
+    from mosdef_gomc.formats.charmm_writer import Charmm
+    import mosdef_gomc.formats.gomc_conf_writer as gomc_control
+
+    # calc MC steps for gomc equilb
+    # number of simulation steps
+    if (${params.debugging}):
+        gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
+    else:
+        gomc_steps_equilibration = 100000000
+    gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
+    console_output_freq = 100 # Monte Carlo Steps between console output
+    pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
+    block_ave_output_freq = int(gomc_steps_production/1000) # Monte Carlo Steps between console output
+    coordinate_output_freq = int(gomc_steps_production/1000) # # set value for paper = 50 * 10**3
+    restart_output_freq = int(gomc_steps_production/10) # # set value for paper = 50 * 10**3
+    if (${params.debugging}):
+        EqSteps = 100 # MCS for equilibration
+        AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
+    else:
+        EqSteps = 100000 # MCS for equilibration
+        AdjSteps = 1000 #MCS for adjusting max displacement, rotation, volume, etc.
+    MC_steps = int(gomc_steps_production)
+    # cutoff and tail correction
+    Rcut_ang = 12 * u.angstrom
+    Rcut_low_ang = 1.0 * u.angstrom
+    LRC = True
+    Exclude = "1-4"
+
+
+    # Eq _NVT in GEMC (expert mode) MC move ratios
+    DisFreqEM = 0.50
+    RotFreqEM = 0.35
+    IntraSwapFreqEM = 0.15
+
+    # MC move ratios
+    DisFreq = 0.35
+    RotFreq = 0.34
+    VolFreq = 0.01
+    MultiParticleFreq=0.00
+    RegrowthFreq = 0.10
+    IntraSwapFreq = 0.00
+    IntraMEMC_2Freq = 0.00
+    CrankShaftFreq = 0.00
+    SwapFreq = 0.20
+    MEMC_2Freq = 0.0
+
+    gomc_output_data_every_X_steps = 50 * 10**3 # # set value for paper = 50 * 10**3
+    # output all data and calc frequecy
+    output_true_list_input = [
+        True,
+        int(gomc_output_data_every_X_steps),
+    ]
+    output_false_list_input = [
+        False,
+        int(gomc_output_data_every_X_steps),
+    ]
+    output_file_prefix1="GOMC_GEMC_Equilibration"
+    output_file_prefix2="GOMC_GEMC_Production"
+
+
+    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT1.conf', 'GEMC_NVT', MC_steps, ${temp_K},
+                                        Restart=False,
+                                        ExpertMode=True,
+                                        check_input_files_exist=False,
+                                        input_variables_dict={"VDWGeometricSigma": False,
+                                                            "Ewald": True,
+                                                            "ElectroStatic": True,
+                                                            "PRNG": int(0),
+                                                            "Pressure": None,
+                                                            "Potential": "VDW",
+                                                            "LRC": LRC,
+                                                            "Rcut": 12,
+                                                            "RcutLow": 1,
+                                                            "Exclude": Exclude,
+                                                            "DisFreq": DisFreqEM,
+                                                            "RotFreq": RotFreqEM,
+                                                            "IntraSwapFreq": IntraSwapFreqEM,
+                                                            "OutputName": output_file_prefix1,
+                                                            "EqSteps": EqSteps,
+                                                            "AdjSteps":AdjSteps,
+                                                            "PressureCalc": [True, pressure_calc_freq],
+                                                            "RestartFreq": output_false_list_input,
+                                                            "CheckpointFreq": output_false_list_input,
+                                                            "DCDFreq": output_false_list_input,
+                                                            "ConsoleFreq": [True, console_output_freq],
+                                                            "BlockAverageFreq":[True, block_ave_output_freq],
+                                                            "HistogramFreq": output_false_list_input,
+                                                            "CoordinatesFreq": output_false_list_input,
+                                                            "CBMC_First": 12,
+                                                            "CBMC_Nth": 10,
+                                                            "CBMC_Ang": 50,
+                                                            "CBMC_Dih": 50,
+                                                            }
+                                        )
+
+
+    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT2.conf', 'GEMC_NVT', MC_steps, ${temp_K},
+                                        Restart=True,
+                                        check_input_files_exist=False,
+                                        binCoordinates_box_0=output_file_prefix1+"_BOX_0_restart.coor",
+                                        extendedSystem_box_0=output_file_prefix1+"_BOX_0_restart.xsc",
+                                        binCoordinates_box_1=output_file_prefix1+"_BOX_1_restart.coor",
+                                        extendedSystem_box_1=output_file_prefix1+"_BOX_1_restart.xsc",
+                                        input_variables_dict={"VDWGeometricSigma": False,
+                                                            "Ewald": True,
+                                                            "ElectroStatic": True,
+                                                            "PRNG": int(0),
+                                                            "Pressure": None,
+                                                            "Potential": "VDW",
+                                                            "LRC": LRC,
+                                                            "Rcut": 12,
+                                                            "RcutLow": 1,
+                                                            "Exclude": Exclude,
+                                                            "DisFreq": DisFreq,
+                                                            "VolFreq": VolFreq,
+                                                            "RotFreq": RotFreq,
+                                                            "MultiParticleFreq": MultiParticleFreq,
+                                                            "RegrowthFreq": RegrowthFreq,
+                                                            "IntraSwapFreq": IntraSwapFreq,
+                                                            "IntraMEMC-2Freq": IntraMEMC_2Freq,
+                                                            "CrankShaftFreq": CrankShaftFreq,
+                                                            "SwapFreq": SwapFreq,
+                                                            "MEMC-2Freq": MEMC_2Freq,
+                                                            "OutputName": output_file_prefix2,
+                                                            "EqSteps": EqSteps,
+                                                            "AdjSteps":AdjSteps,
+                                                            "PressureCalc": [True, pressure_calc_freq],
+                                                            "RestartFreq": output_false_list_input,
+                                                            "CheckpointFreq": output_false_list_input,
+                                                            "DCDFreq": output_false_list_input,
+                                                            "ConsoleFreq": [True, console_output_freq],
+                                                            "BlockAverageFreq":[True, block_ave_output_freq],
+                                                            "HistogramFreq": output_false_list_input,
+                                                            "CoordinatesFreq": output_false_list_input,
+                                                            "CBMC_First": 12,
+                                                            "CBMC_Nth": 10,
+                                                            "CBMC_Ang": 50,
+                                                            "CBMC_Dih": 50,
+                                                            }
+                                        )
+    """
+
+
+}
+
+
 process ask_points {
     container "${params.container__scikit_optimize}"
     publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/ask", mode: 'copy', overwrite: true
@@ -580,7 +821,7 @@ process Collate_GOMC_GEMC_Production {
 process tell_points {
     container "${params.container__scikit_optimize}"
     publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/tell", mode: 'copy', overwrite: true
-    debug true
+    debug false
     cache 'lenient'
     fair true
     input:
@@ -702,6 +943,39 @@ workflow calibrate_wrapper {
     tell_points(tellPointsInput,ewald_density_data)
     pre_incr = tell_points.out.curr_mdl
     incr=pre_incr.map { prefix1, prefix2, prefix3 -> tuple( prefix1, prefix2+1, prefix3) }
-    incr.view()
+    //incr.view()
 
+}
+
+workflow calibrate_recursive {
+    take: 
+    iteration
+    resultFile
+    ewald_density_data
+    main:
+        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 4,quote:'"').map { 
+            row -> [row.temp_K, row.P_bar, row.No_mol, row.Rho_kg_per_m_cubed, row.L_m_if_cubed, row.RcutCoulomb]
+        }
+        GEMC_Recursive = solventData.groupTuple(by:0,size:2,remainder:false)
+        GEMC_RecursiveFlattened = GEMC_Recursive.map { tuple ->
+            def temperature = tuple[0]
+            def pressures = tuple[1]
+            def num_mol = tuple[2]
+            def densities = tuple[3]
+            def box_length = tuple[4]
+            def rcut = tuple[5]
+            // Customize this part based on your specific requirements
+            return [temperature, densities[0], densities[1], \
+            num_mol[0], num_mol[1], box_length[0], box_length[1]]
+        }
+        GEMC_RecursiveFlattened.view()
+        solvent_xml = file(params.path_to_xml)
+        solvent_xml_channel = Channel.fromPath( solvent_xml )
+        system_input = GEMC_RecursiveFlattened.combine(solvent_xml_channel)  
+        system_input.view()   
+        build_two_box_system_from_scratch(system_input,iteration)
+    emit:
+        iteration
+        resultFile
+        ewald_density_data
 }
