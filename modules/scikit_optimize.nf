@@ -367,7 +367,7 @@ process ask_points {
     tuple val(temp_K), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp), \
     path(xsc1), path(coor1), path(xsc2), path(coor2), path(conf), val(iteration),\
     path("*.json"), emit: systems
-    tuple val(temp_K), path("current_scikit_optimize_model.pkl"), val(iteration), emit: mdl
+    tuple val(temp_K), val(iteration), path("current_scikit_optimize_model.pkl"), emit: mdl
     tuple val(temp_K), path("*.json"), emit: json
     script:
     """
@@ -567,7 +567,7 @@ process Collate_GOMC_GEMC_Production {
     cpus 1
     debug false
     input: tuple val(temp_K), val(iteration), path("*")
-    output: path("merged_data.csv")
+    output: tuple val(temp_K), val(iteration), path("merged_data.csv")
 
     shell:
     """
@@ -578,20 +578,14 @@ process Collate_GOMC_GEMC_Production {
 
 process tell_points {
     container "${params.container__scikit_optimize}"
-    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/ask", mode: 'copy', overwrite: true
-    debug false
+    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/tell", mode: 'copy', overwrite: true
+    debug true
     cache 'lenient'
     fair true
     input:
-    tuple val(temp_K), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp), \
-    path(xsc1), path(coor1), path(xsc2), path(coor2), path(conf),\
-    path(scikit_optimize_model), val(iteration)
+    tuple val(temp_K), val(iteration), path(scikit_optimize_model), path(trial_data, stageAs: "trial_data.csv")
+    path(ref_data)
     output:
-    tuple val(temp_K), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp), \
-    path(xsc1), path(coor1), path(xsc2), path(coor2), path(conf), val(iteration),\
-    path("*.json"), emit: systems
-    tuple val(temp_K), path("current_scikit_optimize_model.pkl"), val(iteration), emit: mdl
-    tuple val(temp_K), path("*.json"), emit: json
     script:
     """
     #!/usr/bin/env python
@@ -599,13 +593,14 @@ process tell_points {
     import sys
     from typing import List
     from pydantic import BaseModel
-
-    class Point(BaseModel):
-        alpha_box_0: float
-        rcc_box_0: float
-        alpha_box_1: float
-        rcc_box_1: float
-
+    import pandas as pd
+    print("Hello from ${temp_K} ${iteration}")
+    df_trial = pd.read_csv("$trial_data", sep='\t')
+    df_ref = pd.read_csv("$ref_data", sep='\t')
+    mean_trial = df_trial.mean()
+    mean_ref = df_ref.mean()
+    print(mean_trial.head())
+    print(mean_ref.head())
     with open("log.txt", 'w') as sys.stdout:
         from skopt import Optimizer
         import pickle
@@ -616,24 +611,7 @@ process tell_points {
             opt = pickle.load(f)
         f.close()
 
-        print("n_initial_points/batch size=",${params.batch_size})
-
-        pointsList = opt.ask(n_points=int(${params.batch_size}))
-
-        for count, value in enumerate(pointsList):
-            # Create a Pydantic object
-            point_obj = Point(alpha_box_0=value[0],\
-                                rcc_box_0=value[1],\
-                                alpha_box_1=value[2],\
-                                rcc_box_1=value[3])
-
-            # Serialize the Pydantic object to JSON
-            with open(f"{count}.json", 'w') as file:
-                file.write(point_obj.json())
-
-        with open("current_scikit_optimize_model.pkl", 'wb') as f:
-            pickle.dump(opt, f)
-        f.close()
+        print("Hello from ${temp_K} ${iteration}")
 
     """
 }
@@ -681,10 +659,9 @@ workflow calibrate_wrapper {
     Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production_Replica.out.record)
     collectedPoints = Extract_Density_GOMC_GEMC_Production.out.analysis.groupTuple(by:[0,1],size:params.batch_size,remainder:false,sort:true)
     sorted=collectedPoints.map { prefix1, prefix2, tbi -> tuple( prefix1, prefix2, tbi.sort{it.name}) }
-    sorted.view()
     Collate_GOMC_GEMC_Production(sorted)
-    //tellPointsInput = ask_points.out.mdl.join(collectedPoints, by:[0,1])
-    //tellPointsInput.view()
-
+    tellPointsInput = ask_points.out.mdl.join(Collate_GOMC_GEMC_Production.out, by:[0,1])
+    tellPointsInput.view()
+    tell_points(tellPointsInput,ewald_density_data)
 
 }

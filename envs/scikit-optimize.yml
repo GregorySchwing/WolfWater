@@ -4,3 +4,4 @@ channels:
 dependencies:
   - scikit-optimize
   - pydantic
+  - pandas
