@@ -650,7 +650,7 @@ process tell_points {
         with open("current_scikit_optimize_model.pkl", 'wb') as f:
             pickle.dump(opt, f)
         f.close()
-
+    iteration=1+${iteration}
     """
 }
 
@@ -689,8 +689,8 @@ workflow calibrate_wrapper {
     main:
     models = initialize_model(gemc_system_input)
     build_two_box_system(gemc_system_input)
-    f = build_two_box_system.out.system.join(models.scikit_optimize_model)
     
+    f = build_two_box_system.out.system.join(models.scikit_optimize_model)
     ask_points(f)
     append_parameters_to_conf(ask_points.out.systems.transpose())
     GOMC_GEMC_Production_Replica(append_parameters_to_conf.out)
@@ -700,5 +700,8 @@ workflow calibrate_wrapper {
     Collate_GOMC_GEMC_Production(sorted)
     tellPointsInput = ask_points.out.mdl.join(Collate_GOMC_GEMC_Production.out, by:[0,1])
     tell_points(tellPointsInput,ewald_density_data)
+    pre_incr = tell_points.out.curr_mdl
+    incr=pre_incr.map { prefix1, prefix2, prefix3 -> tuple( prefix1, prefix2+1, prefix3) }
+    incr.view()
 
 }
