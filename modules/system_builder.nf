@@ -278,7 +278,7 @@ process build_two_box_system_already_calibrated {
     output:
     output:
     tuple val(temp_K), val(METHOD), path(pdb1), path(psf1), path(pdb2), path(psf2), path("system.inp"), \
-    path(xsc1),path(coor1),path(xsc2),path(coor2),path(chk),path("in_GEMC_NVT.conf"), emit: system
+    path(xsc1),path(coor1),path(xsc2),path(coor2),path(chk),path("in_GEMC_NVT_eq.conf"),path("in_GEMC_NVT.conf"), emit: system
     tuple val(temp_K), path("charmm.pkl"), path(xsc1),path(coor1),path(xsc2),path(coor2),path(statepoint1),path(statepoint2), emit: charmm
     tuple val(temp_K), path("charmm.pkl"),path(statepoint1),path(statepoint2), emit: charmm_norestarts
     script:
@@ -420,6 +420,7 @@ process build_two_box_system_already_calibrated {
         gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
     else:
         gomc_steps_equilibration = 100000000
+    gomc_steps_production_expert_mode = int(gomc_steps_equilibration/10) # set value for paper = 1 * 10**6
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
@@ -440,6 +441,12 @@ process build_two_box_system_already_calibrated {
     Exclude = "1-4"
     RcutCoulomb_box_0=convergence_obj.models["${METHOD}"][0].ConvergedRCut
     RcutCoulomb_box_1=convergence_obj.models["${METHOD}"][1].ConvergedRCut
+
+    # Eq _NVT in GEMC (expert mode) MC move ratios
+    DisFreqEM = 0.45
+    RotFreqEM = 0.35
+    IntraSwapFreqEM = 0.15
+    MultiParticleFreqEM = 0.05
 
     # MC move ratios
     DisFreq = 0.35
@@ -463,11 +470,11 @@ process build_two_box_system_already_calibrated {
         False,
         int(gomc_output_data_every_X_steps),
     ]
-    output_file_prefix="GOMC_GEMC_Production"
+    output_file_prefix_eq="GOMC_GEMC_Equilibration"
 
-
-    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT.conf', 'GEMC_NVT', MC_steps, ${temp_K},
+    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT_eq.conf', 'GEMC_NVT', gomc_steps_production_expert_mode, ${temp_K},
                                         Restart=True,
+                                        ExpertMode=True,
                                         check_input_files_exist=False,
                                         Coordinates_box_0="${pdb1}",
                                         Coordinates_box_1="${pdb2}",
@@ -477,6 +484,69 @@ process build_two_box_system_already_calibrated {
                                         extendedSystem_box_0="${xsc1}",
                                         binCoordinates_box_1="${coor2}",
                                         extendedSystem_box_1="${xsc2}",
+                                        input_variables_dict={"VDWGeometricSigma": False,
+                                                            "Ewald": False,
+                                                            "ElectroStatic": True,
+                                                            "PRNG": int(0),
+                                                            "Pressure": None,
+                                                            "Potential": "VDW",
+                                                            "LRC": LRC,
+                                                            "Rcut": 12,
+                                                            "RcutLow": 1,
+                                                            "RcutCoulomb_box_0": RcutCoulomb_box_0,
+                                                            "RcutCoulomb_box_1": RcutCoulomb_box_1,
+                                                            "Exclude": Exclude,
+                                                            "DisFreq": DisFreqEM,
+                                                            "RotFreq": RotFreqEM,
+                                                            "IntraSwapFreq": IntraSwapFreqEM,
+                                                            "MultiParticleFreq": MultiParticleFreqEM,
+                                                            "OutputName": output_file_prefix_eq,
+                                                            "EqSteps": EqSteps,
+                                                            "AdjSteps":AdjSteps,
+                                                            "PressureCalc": [True, pressure_calc_freq],
+                                                            "RestartFreq": [True, restart_output_freq],
+                                                            "CheckpointFreq": [True, restart_output_freq],
+                                                            "DCDFreq": [True, coordinate_output_freq],
+                                                            "ConsoleFreq": [True, console_output_freq],
+                                                            "BlockAverageFreq":[True, block_ave_output_freq],
+                                                            "HistogramFreq": output_false_list_input,
+                                                            "CoordinatesFreq": output_false_list_input,
+                                                            "CBMC_First": 12,
+                                                            "CBMC_Nth": 10,
+                                                            "CBMC_Ang": 50,
+                                                            "CBMC_Dih": 50,
+                                                            }
+                                        )
+
+    kind_pot = "${METHOD}".split('_')
+    file1 = open("in_GEMC_NVT_eq.conf", "a")
+    defAlphaLine = "{box}\\t{val}\\n".format(box="Wolf", val="True")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfKind", val=kind_pot[0])
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfPotential", val=kind_pot[1])
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=convergence_obj.models["${METHOD}"][0].ConvergedAlpha)
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="1", val=convergence_obj.models["${METHOD}"][1].ConvergedAlpha)
+    file1.writelines(defAlphaLine)
+
+    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="${chk}")
+    file1.writelines(defAlphaLine)
+
+    output_file_prefix="GOMC_GEMC_Production"
+
+    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT.conf', 'GEMC_NVT', MC_steps, ${temp_K},
+                                        Restart=True,
+                                        check_input_files_exist=False,
+                                        Coordinates_box_0="${pdb1}",
+                                        Coordinates_box_1="${pdb2}",
+                                        Structure_box_0="${psf1}",
+                                        Structure_box_1="${psf2}",
+                                        binCoordinates_box_0=output_file_prefix_eq+"_BOX_0_restart.coor",
+                                        extendedSystem_box_0=output_file_prefix_eq+"_BOX_0_restart.xsc",
+                                        binCoordinates_box_1=output_file_prefix_eq+"_BOX_1_restart.coor",
+                                        extendedSystem_box_1=output_file_prefix_eq+"_BOX_1_restart.xsc",
                                         input_variables_dict={"VDWGeometricSigma": False,
                                                             "Ewald": False,
                                                             "ElectroStatic": True,
@@ -530,7 +600,7 @@ process build_two_box_system_already_calibrated {
     defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="1", val=convergence_obj.models["${METHOD}"][1].ConvergedAlpha)
     file1.writelines(defAlphaLine)
 
-    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file="${chk}")
+    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="Checkpoint", val="True",file=output_file_prefix_eq+"_restart.chk")
     file1.writelines(defAlphaLine)
     """
 }
