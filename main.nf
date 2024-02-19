@@ -116,9 +116,9 @@ log.info """\
         build_GEMC_system(gemc_system_input)
         iteration = Channel.value(0)
         resultFile = file(params.output_file)
-        //json = Channel.empty()
+        //resultFile = Channel.empty()
         calibrate_recursive.recurse(iteration,resultFile,build_GEMC_system.out.ewald_density_data).times(2)
-        //calibrate_recursive.scan(iteration,json,build_GEMC_system.out.ewald_density_data)
+        //calibrate_recursive.scan(iteration,resultFile,build_GEMC_system.out.ewald_density_data)
         return
         calibrate_wrapper(gemc_system_input,build_GEMC_system.out.ewald_density_data)
         tempAndDensity = convergenceChannel.map { tuple ->

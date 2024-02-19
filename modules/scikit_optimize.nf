@@ -1056,7 +1056,7 @@ process Extract_Density_GOMC_GEMC_Production_Recursive {
     output:
     tuple val(temp_K),val(iteration), \
     path("${temp_K}_${iteration}_${json_id}_COMBINED.csv"), emit: analysis
-    path("${temp_K}_${iteration}_${json_id}.json"), emit: json_full
+    tuple val(iteration), path("${temp_K}_${iteration}_${json_id}.json"), emit: json_full
     script:
     """
     #!/usr/bin/env python
@@ -1342,21 +1342,22 @@ workflow calibrate_recursive {
         append_parameters_to_conf_recursive(ask_points_recursive.out.systems.transpose())
         GOMC_GEMC_Equilibration_and_Production(append_parameters_to_conf_recursive.out)
         Extract_Density_GOMC_GEMC_Production_Recursive(GOMC_GEMC_Equilibration_and_Production.out.record.combine(ewald_density_data))
+        syncPoints = Extract_Density_GOMC_GEMC_Production_Recursive.out.json_full.groupTuple(by:0, size:params.batch_size ,remainder:false)
+        syncPoints.view()
+        syncPoints.multiMap { it, jsons ->
+            newIter: it + 1
+            newJsons: jsons
+        }
+        .set { result }
+        result.newIter.view()
         //collectedPoints = Extract_Density_GOMC_GEMC_Production_Recursive.out.analysis.groupTuple(by:[0,1],size:params.batch_size,remainder:false,sort:true)
         //sorted=collectedPoints.map { prefix1, prefix2, tbi -> tuple( prefix1, prefix2, tbi.sort{it.name}) }
         //iteration = Channel.empty()
         //json = Channel.empty()
         //ewald_density_data = Channel.empty()
 
-        //Extract_Density_GOMC_GEMC_Production_Recursive.out.json_full
-        //.branch {
-        //  small: it < 10
-        //   large: it > 10
-        //}
-        //.set { result }
-        
     emit:
-        iteration
-        json
+        result.newIter
+        result.newJsons
         ewald_density_data
 }
