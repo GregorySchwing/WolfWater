@@ -88,6 +88,70 @@ process initialize_model {
 }
 
 
+process initialize_model_recursive {
+    container "${params.container__scikit_optimize}"
+    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/model/", mode: 'copy', overwrite: true
+
+    cache 'lenient'
+    fair true
+    debug true
+    input:
+    tuple val(temp_K), val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), \
+    val(No_mol1), val(No_mol2), val(L_m_if_cubed1), val(L_m_if_cubed2),\
+    path(path_to_xml)
+    val(iteration)
+    output:
+    tuple val(temp_K), val(iteration), path("initial_scikit_optimize_model.pkl"), emit: scikit_optimize_model
+    path("log.txt")
+    script:
+    """
+    #!/usr/bin/env python
+    # for python3
+
+    from typing import List
+    from pydantic import BaseModel
+    print("hello from ", $temp_K, $Rho_kg_per_m_cubed1,$Rho_kg_per_m_cubed2)
+
+    liquid_box_length_Ang = ${L_m_if_cubed1}
+    vapor_box_length_Ang = ${L_m_if_cubed2}
+    percentage = 0.8
+    RCC_START = 10.0
+    RCC_END_BOX_0 = (float(liquid_box_length_Ang)/2.0)*percentage
+    RCC_END_BOX_1 = (float(vapor_box_length_Ang)/2.0)*percentage
+
+    import sys
+    with open("log.txt", 'w') as sys.stdout:
+        from skopt import Optimizer
+        import pickle
+        import numpy as np
+        np.int = np.int64
+        opt = Optimizer([(${params.alpha_lb},${params.alpha_ub}),\
+                        (RCC_START,RCC_END_BOX_0),\
+                        (${params.alpha_lb},${params.alpha_ub}),\
+                        (RCC_START,RCC_END_BOX_1)],
+                    "GP", acq_func="EI",
+                    acq_optimizer="sampling",
+                    initial_point_generator="lhs",
+                    n_initial_points=${params.batch_size},
+                    random_state=123)
+
+        with open('initial_scikit_optimize_model.pkl', 'wb') as f:
+            pickle.dump(opt, f)
+        f.close()
+        print("Model initialized with domain=",[(${params.alpha_lb},${params.alpha_ub}),\
+                        (RCC_START,RCC_END_BOX_0),\
+                        (${params.alpha_lb},${params.alpha_ub}),\
+                        (RCC_START,RCC_END_BOX_1)])
+        print("GP")
+        print("acq_func=EI")
+        print("acq_optimizer=sampling")
+        print("initial_point_generator=lhs"),
+        print("n_initial_points/batch size=",${params.batch_size})
+
+    """
+}
+
+
 process build_two_box_system {
     cache 'lenient'
     fair true
@@ -358,7 +422,7 @@ process build_two_box_system_from_scratch {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/iteration_${iteration}_gemc/input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/input/", mode: 'copy', overwrite: true
     cpus 1
 
     debug false
@@ -368,7 +432,7 @@ process build_two_box_system_from_scratch {
     path(path_to_xml)
     val(iteration)
     output:
-    tuple val(temp_K), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
+    tuple val(temp_K), val(iteration), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
     path("in_GEMC_NVT1.conf"), path("in_GEMC_NVT2.conf"), emit: system
     script:
     """
@@ -531,8 +595,8 @@ process build_two_box_system_from_scratch {
                                                             "EqSteps": EqSteps,
                                                             "AdjSteps":AdjSteps,
                                                             "PressureCalc": [True, pressure_calc_freq],
-                                                            "RestartFreq": output_false_list_input,
-                                                            "CheckpointFreq": output_false_list_input,
+                                                            "RestartFreq": [True, restart_output_freq],
+                                                            "CheckpointFreq": [True, restart_output_freq],
                                                             "DCDFreq": output_false_list_input,
                                                             "ConsoleFreq": [True, console_output_freq],
                                                             "BlockAverageFreq":[True, block_ave_output_freq],
@@ -660,6 +724,73 @@ process ask_points {
 }
 
 
+
+process ask_points_recursive {
+    container "${params.container__scikit_optimize}"
+    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/ask", mode: 'copy', overwrite: true
+    debug false
+    cache 'lenient'
+    fair true
+    input:
+    tuple val(temp_K), val(iteration), path(pdb1), \
+    path(psf1), path(pdb2), path(psf2), path(inp), \
+    path(conf1),path(conf2), path(scikit_optimize_model)
+    output:
+    tuple val(temp_K), val(iteration), path(pdb1), \
+    path(psf1), path(pdb2), path(psf2), path(inp), \
+    path(conf1),path(conf2),path("*.json"), emit: systems
+    tuple val(temp_K), val(iteration), path(scikit_optimize_model), emit: mdl
+    tuple val(temp_K), path("*.json"), emit: json
+    path("current_scikit_optimize_model.pkl"), emit: curr_mdl
+    script:
+    """
+    #!/usr/bin/env python
+    # for python3
+    import sys
+    from typing import List
+    from pydantic import BaseModel
+
+    class Point(BaseModel):
+        alpha_box_0: float
+        rcc_box_0: float
+        alpha_box_1: float
+        rcc_box_1: float
+        mse: float
+
+    with open("log.txt", 'w') as sys.stdout:
+        from skopt import Optimizer
+        import pickle
+        import numpy as np
+        np.int = np.int64
+        
+        with open("${scikit_optimize_model}", 'rb') as f:
+            opt = pickle.load(f)
+        f.close()
+
+        print("n_initial_points/batch size=",${params.batch_size})
+
+        pointsList = opt.ask(n_points=int(${params.batch_size}))
+
+        for count, value in enumerate(pointsList):
+            # Create a Pydantic object
+            point_obj = Point(alpha_box_0=value[0],\
+                                rcc_box_0=value[1],\
+                                alpha_box_1=value[2],\
+                                rcc_box_1=value[3],
+                                mse=-1.0)
+
+            # Serialize the Pydantic object to JSON
+            with open(f"{count}.json", 'w') as file:
+                file.write(point_obj.json())
+
+        with open("current_scikit_optimize_model.pkl", 'wb') as f:
+            pickle.dump(opt, f)
+        f.close()
+
+    """
+}
+
+
 process append_parameters_to_conf {
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/append_parameters_to_conf/${json.baseName}", mode: 'copy', overwrite: true
@@ -716,6 +847,84 @@ process append_parameters_to_conf {
 }
 
 
+
+process append_parameters_to_conf_recursive {
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/append_parameters_to_conf/${json.baseName}", mode: 'copy', overwrite: true
+    cache 'lenient'
+    fair true
+    debug false
+    input:
+    tuple val(temp_K),val(iteration),path(pdb1), \
+    path(psf1), path(pdb2), path(psf2), path(inp), \
+    path(conf1), path(conf2), path(json)
+    output:
+    tuple val(temp_K), val(iteration), path(pdb1),\
+    path(psf1), path(pdb2), path(psf2),\
+    path(inp),\
+    path("in_GEMC_NVT_eq_RCC_ALPHA.conf"),\
+    path("in_GEMC_NVT_RCC_ALPHA.conf"),\
+    path(json), val(json.baseName)
+    script:
+    """
+    #!/usr/bin/env python
+
+    from typing import List
+    from pydantic import BaseModel
+
+    class Point(BaseModel):
+        alpha_box_0: float
+        rcc_box_0: float
+        alpha_box_1: float
+        rcc_box_1: float
+        mse: float
+
+    # Function to load Pydantic objects from JSON file
+    def load_point_from_json(file_path: str) -> Point:
+        with open(file_path, 'r') as file:
+            json_data = file.read()
+            return Point.parse_raw(json_data)
+
+    loaded_point = load_point_from_json("${json}")
+    print("Loaded point")
+    print(loaded_point)
+    # Specify the file paths
+    input_file_path = "${conf1}"  # Replace with your actual input file path
+    output_file_path = "in_GEMC_NVT_eq_RCC_ALPHA.conf"  # Replace with your desired output file path
+    print(input_file_path)
+    print(output_file_path)
+    # Open input file for reading and output file for writing
+    with open(input_file_path, 'r') as input_file, open(output_file_path, 'w') as output_file:
+        # Read the input file line by line
+        for line in input_file:
+            # Write each line to the output file
+            output_file.write(line)
+        print("WolfAlpha\t0\t{alpha}".format(alpha=loaded_point.alpha_box_0),file=output_file)
+        print("RcutCoulomb\t0\t{alpha}".format(alpha=loaded_point.rcc_box_0),file=output_file)
+        print("WolfAlpha\t1\t{alpha}".format(alpha=loaded_point.alpha_box_1),file=output_file)
+        print("RcutCoulomb\t1\t{alpha}".format(alpha=loaded_point.rcc_box_1),file=output_file)
+
+    input_file_path = "${conf2}"  # Replace with your actual input file path
+    output_file_path = "in_GEMC_NVT_RCC_ALPHA.conf"  # Replace with your desired output file path
+    print(input_file_path)
+    print(output_file_path)
+    # Open input file for reading and output file for writing
+    with open(input_file_path, 'r') as input_file, open(output_file_path, 'w') as output_file:
+        # Read the input file line by line
+        for line in input_file:
+            # Write each line to the output file
+            output_file.write(line)
+        print("WolfAlpha\t0\t{alpha}".format(alpha=loaded_point.alpha_box_0),file=output_file)
+        print("RcutCoulomb\t0\t{alpha}".format(alpha=loaded_point.rcc_box_0),file=output_file)
+        print("WolfAlpha\t1\t{alpha}".format(alpha=loaded_point.alpha_box_1),file=output_file)
+        print("RcutCoulomb\t1\t{alpha}".format(alpha=loaded_point.rcc_box_1),file=output_file)
+
+
+    """
+}
+
+
+
 process GOMC_GEMC_Production_Replica {
     // Important to allow for bad points
     // If GOMC doesn't finish, the objective function will be bad.
@@ -738,6 +947,36 @@ process GOMC_GEMC_Production_Replica {
     #!/bin/bash
     cat ${gemc_conf} > local.conf
     GOMC_CPU_GEMC +p${task.cpus} local.conf > GOMC_GEMC_Production.log
+    """
+}
+
+
+process GOMC_GEMC_Equilibration_and_Production {
+    // Important to allow for bad points
+    // If GOMC doesn't finish, the objective function will be bad.
+    errorStrategy 'ignore'
+    cache 'lenient'
+    fair true
+    container "${params.container__gomc}"
+    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/production/${json.baseName}", mode: 'copy', overwrite: true
+    cpus 8
+    debug false
+    input:
+    tuple val(temp_K), val(iteration), path(pdb1), path(psf1), \
+    path(pdb2), path(psf2), path(inp), \
+    path(conf1), path(conf2),\
+    path(json), val(json_id)
+    output:
+    tuple val(temp_K), val(iteration), val(json_id), path(json), path("GOMC_GEMC_Equilibration.log"),  emit: record_eq
+    tuple val(temp_K), val(iteration), val(json_id), path(json), path("GOMC_GEMC_Production.log"),  emit: record
+    shell:
+    """
+    
+    #!/bin/bash
+    cat ${conf1} > local1.conf
+    GOMC_CPU_GEMC +p${task.cpus} local1.conf > GOMC_GEMC_Equilibration.log
+    cat ${conf2} > local2.conf
+    GOMC_CPU_GEMC +p${task.cpus} local2.conf > GOMC_GEMC_Production.log
     """
 }
 
@@ -801,6 +1040,128 @@ process Extract_Density_GOMC_GEMC_Production {
     df_combined.to_csv("${temp_K}_${iteration}_${json_id}_COMBINED.csv", header=True, sep=' ', index=False)
     """
 }
+
+
+process Extract_Density_GOMC_GEMC_Production_Recursive {
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/scikit_optimize/temperature_${temp_K}_gemc/batch/${iteration}/density/${json.baseName}", mode: 'copy', overwrite: true
+
+    cpus 1
+    debug false
+    input:
+    tuple val(temp_K), val(iteration), val(json_id), path(json), path(logfile), path(ref_data, stageAs: "ref_data.csv")
+
+    output:
+    tuple val(temp_K),val(iteration), \
+    path("${temp_K}_${iteration}_${json_id}_COMBINED.csv"), emit: analysis
+    path("${temp_K}_${iteration}_${json_id}.json"), emit: json_full
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import re
+    import os
+    import numpy as np
+    from pathlib import Path
+    def extract(filename,regex_pattern):
+
+        EnRegex = re.compile(regex_pattern)
+        print('extract_target',filename, 'pattern',regex_pattern)
+        steps = []
+        densities = []
+        try:
+            with open(filename, 'r') as f:
+                for line in f:
+                    if EnRegex.match(line):
+                        try:
+                            steps.append(float(line.split()[1]))
+                            densities.append(float(line.split()[8]))
+                        except:
+                            print(line)
+                            print("An exception occurred") 
+        except:
+            print("Cant open",filename) 
+        steps_np = np.array(steps)
+        densities_np = np.array(densities)
+        return steps_np, densities_np
+
+    steps_box_0, densities_box_0 = extract("$logfile","STAT_0")
+    df1 = pd.DataFrame(densities_box_0, index=None, columns=['${temp_K}_${iteration}_${json_id}_BOX_0'])
+    #df.to_csv("${temp_K}_${iteration}_${json_id}_BOX_0.csv", header=True, sep=' ', index=False)
+
+    steps_box_1, densities_box_1 = extract("$logfile","STAT_1")
+    df2 = pd.DataFrame(densities_box_1, index=None, columns=['${temp_K}_${iteration}_${json_id}_BOX_1'])
+    #df.to_csv("${temp_K}_${iteration}_${json_id}_BOX_1.csv", header=True, sep=' ', index=False)
+
+    # Concatenate both dataframes
+    df_combined = pd.concat([df1, df2], axis=1)
+
+    # Save to CSV
+    df_combined.to_csv("${temp_K}_${iteration}_${json_id}_COMBINED.csv", header=True, sep=' ', index=False)
+    
+    df_ref = pd.read_csv("$ref_data", delim_whitespace=True)
+    mean_trial = df_combined.mean()
+    mean_ref = df_ref.mean()
+    print(mean_trial.head())
+    print(mean_ref.head())
+
+    df1 = mean_ref.filter(like='${temp_K}')
+    first_value_col1 = df1.iloc[0]
+    first_value_col2 = df1.iloc[1]
+    print(df1.head())
+
+    # Function to calculate MSE
+    def calculate_mse(col1, col2):
+        return ((col1 - col2) ** 2).mean()
+
+    # Calculate MSE for each pair of columns in mean_trial compared to df1
+    mse_results = {}
+    num_columns_df2 = len(mean_trial)
+    for i in range(0, num_columns_df2, 2):
+        col1 = mean_trial.iloc[i]
+        col2 = mean_trial.iloc[i+1]
+        col_name = int(i / 2)  # Evaluate the division directly
+        mse_results[col_name] = calculate_mse(first_value_col1, col1) + calculate_mse(first_value_col2, col2)
+    # Create DataFrame from MSE results
+    mse_df = pd.DataFrame.from_dict(mse_results, orient='index', columns=['MSE'])
+    print(mse_df)
+    y = mse_df.values.flatten().tolist()
+    print(y)    
+
+    from typing import List
+    from pydantic import BaseModel
+
+    class Point(BaseModel):
+        alpha_box_0: float
+        rcc_box_0: float
+        alpha_box_1: float
+        rcc_box_1: float
+        mse: float
+
+    # Function to load Pydantic objects from JSON file
+    def load_point_from_json(file_path: str) -> Point:
+        with open(file_path, 'r') as file:
+            json_data = file.read()
+            return Point.parse_raw(json_data)
+
+    loaded_point = load_point_from_json("${json}")
+
+    # Create a Pydantic object
+    point_obj = Point(alpha_box_0=loaded_point.alpha_box_0,\
+                        rcc_box_0=loaded_point.rcc_box_0,\
+                        alpha_box_1=loaded_point.alpha_box_1,\
+                        rcc_box_1=loaded_point.rcc_box_1,
+                        mse=y[0])
+
+    # Serialize the Pydantic object to JSON
+    with open(f"${temp_K}_${iteration}_${json_id}.json", 'w') as file:
+        file.write(point_obj.json())
+
+    """
+}
+
 
 
 process Collate_GOMC_GEMC_Production { 
@@ -952,10 +1313,10 @@ workflow calibrate_wrapper {
 workflow calibrate_recursive {
     take: 
     iteration
-    resultFile
+    json
     ewald_density_data
     main:
-        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 4,quote:'"').map { 
+        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 2,quote:'"').map { 
             row -> [row.temp_K, row.P_bar, row.No_mol, row.Rho_kg_per_m_cubed, row.L_m_if_cubed, row.RcutCoulomb]
         }
         GEMC_Recursive = solventData.groupTuple(by:0,size:2,remainder:false)
@@ -974,10 +1335,28 @@ workflow calibrate_recursive {
         solvent_xml = file(params.path_to_xml)
         solvent_xml_channel = Channel.fromPath( solvent_xml )
         system_input = GEMC_RecursiveFlattened.combine(solvent_xml_channel)  
-        system_input.view()   
         build_two_box_system_from_scratch(system_input,iteration)
+        models = initialize_model_recursive(system_input,iteration)
+        f = build_two_box_system_from_scratch.out.system.join(models.scikit_optimize_model, by:[0,1])
+        ask_points_recursive(f)
+        append_parameters_to_conf_recursive(ask_points_recursive.out.systems.transpose())
+        GOMC_GEMC_Equilibration_and_Production(append_parameters_to_conf_recursive.out)
+        Extract_Density_GOMC_GEMC_Production_Recursive(GOMC_GEMC_Equilibration_and_Production.out.record.combine(ewald_density_data))
+        //collectedPoints = Extract_Density_GOMC_GEMC_Production_Recursive.out.analysis.groupTuple(by:[0,1],size:params.batch_size,remainder:false,sort:true)
+        //sorted=collectedPoints.map { prefix1, prefix2, tbi -> tuple( prefix1, prefix2, tbi.sort{it.name}) }
+        //iteration = Channel.empty()
+        //json = Channel.empty()
+        //ewald_density_data = Channel.empty()
+
+        //Extract_Density_GOMC_GEMC_Production_Recursive.out.json_full
+        //.branch {
+        //  small: it < 10
+        //   large: it > 10
+        //}
+        //.set { result }
+        
     emit:
         iteration
-        resultFile
+        json
         ewald_density_data
 }

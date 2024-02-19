@@ -83,7 +83,7 @@ log.info """\
 
         // Create a channel with the CSV file
         csv_channel = channel.fromPath(input_csv)
-        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 4,quote:'"').map { 
+        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 2,quote:'"').map { 
             row -> [row.temp_K, row.P_bar, row.No_mol, row.Rho_kg_per_m_cubed, row.L_m_if_cubed, row.RcutCoulomb]
         }
         //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
@@ -114,25 +114,13 @@ log.info """\
         }
         gemc_system_input = convergenceChannelFlattened.combine(solvent_xml_channel)   
         build_GEMC_system(gemc_system_input)
-        calibrate_wrapper(gemc_system_input,build_GEMC_system.out.ewald_density_data)
-        GEMC_Recursive = solventData.groupTuple(by:0,size:2,remainder:false)
-        GEMC_RecursiveFlattened = GEMC_Recursive.map { tuple ->
-            def temperature = tuple[0]
-            def pressures = tuple[1]
-            def num_mol = tuple[2]
-            def densities = tuple[3]
-            def box_length = tuple[4]
-            def rcut = tuple[5]
-            // Customize this part based on your specific requirements
-            return [temperature, densities[0], densities[1], \
-            num_mol[0], num_mol[1], box_length[0], box_length[1],\
-            rcut[0],rcut[1]]
-        }
-        GEMC_RecursiveFlattened.view()
         iteration = Channel.value(0)
         resultFile = file(params.output_file)
+        //json = Channel.empty()
         calibrate_recursive.recurse(iteration,resultFile,build_GEMC_system.out.ewald_density_data).times(2)
+        //calibrate_recursive.scan(iteration,json,build_GEMC_system.out.ewald_density_data)
         return
+        calibrate_wrapper(gemc_system_input,build_GEMC_system.out.ewald_density_data)
         tempAndDensity = convergenceChannel.map { tuple ->
             def temperature = tuple[0]
             def densities = tuple[1]
