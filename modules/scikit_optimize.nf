@@ -478,9 +478,10 @@ process build_two_box_system_from_scratch {
 
 
     # Eq _NVT in GEMC (expert mode) MC move ratios
-    DisFreqEM = 0.50
+    DisFreqEM = 0.45
     RotFreqEM = 0.35
     IntraSwapFreqEM = 0.15
+    MultiParticleFreqEM = 0.05
 
     # MC move ratios
     DisFreq = 0.35
@@ -525,6 +526,7 @@ process build_two_box_system_from_scratch {
                                                             "DisFreq": DisFreqEM,
                                                             "RotFreq": RotFreqEM,
                                                             "IntraSwapFreq": IntraSwapFreqEM,
+                                                            "MultiParticleFreq": MultiParticleFreqEM,
                                                             "OutputName": output_file_prefix1,
                                                             "EqSteps": EqSteps,
                                                             "AdjSteps":AdjSteps,
