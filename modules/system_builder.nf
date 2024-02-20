@@ -261,7 +261,7 @@ process build_two_box_system_already_calibrated {
     cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
-    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/input", mode: 'copy', overwrite: false
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/methods/${METHOD}/input", mode: 'copy', overwrite: false
     cpus 1
 
     debug false
@@ -2867,7 +2867,26 @@ process GOMC_GEMC_Equilibration_Production {
     output:
     tuple val(temp_K),val(METHOD),path("GOMC_GEMC_Equilibration.log"),  emit: equil_record
     tuple val(temp_K),val(METHOD),path("GOMC_GEMC_Production.log"),  emit: record
-
+    tuple val(temp_K),\
+    path("GOMC_GEMC_Equilibration_BOX_0_restart.xsc"),\
+    path("GOMC_GEMC_Equilibration_BOX_1_restart.xsc"),\
+    path("GOMC_GEMC_Equilibration_BOX_0_restart.coor"),\
+    path("GOMC_GEMC_Equilibration_BOX_1_restart.coor"),\
+    path("GOMC_GEMC_Equilibration_BOX_0_restart.pdb"),\
+    path("GOMC_GEMC_Equilibration_BOX_1_restart.pdb"),\
+    path("GOMC_GEMC_Equilibration_BOX_0_restart.psf"),\
+    path("GOMC_GEMC_Equilibration_BOX_1_restart.psf"),\
+    path("GOMC_GEMC_Equilibration_restart.chk"),  emit: eq_restart_files
+    tuple val(temp_K),\
+    path("GOMC_GEMC_Production_BOX_0_restart.xsc"),\
+    path("GOMC_GEMC_Production_BOX_1_restart.xsc"),\
+    path("GOMC_GEMC_Production_BOX_0_restart.coor"),\
+    path("GOMC_GEMC_Production_BOX_1_restart.coor"),\
+    path("GOMC_GEMC_Production_BOX_0_restart.pdb"),\
+    path("GOMC_GEMC_Production_BOX_1_restart.pdb"),\
+    path("GOMC_GEMC_Production_BOX_0_restart.psf"),\
+    path("GOMC_GEMC_Production_BOX_1_restart.psf"),\
+    path("GOMC_GEMC_Production_restart.chk"),  emit: prod_restart_files
     shell:
     """
     
