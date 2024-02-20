@@ -1790,7 +1790,7 @@ process plot_grids {
 
 
 process plot_grids_two_box {
-    cache 'lenient'
+    //cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/calibration/plots", mode: 'copy', overwrite: false
@@ -1843,8 +1843,8 @@ process plot_grids_two_box {
     #rel_error_weight = 0.75
     #std_weight = 0.25
 
-    rel_error_weight = 0.75
-    std_weight = 0.25
+    rel_error_weight = 0.95
+    std_weight = 0.05
 
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
