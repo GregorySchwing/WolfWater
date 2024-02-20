@@ -417,7 +417,7 @@ process build_two_box_system_already_calibrated {
     # calc MC steps for gomc equilb
     # number of simulation steps
     if (${params.debugging}):
-        gomc_steps_equilibration = 1000 #  set value for paper = 1 * 10**6
+        gomc_steps_equilibration = 10000 #  set value for paper = 1 * 10**6
     else:
         gomc_steps_equilibration = 100000000
     gomc_steps_production_expert_mode = int(gomc_steps_equilibration/10) # set value for paper = 1 * 10**6
@@ -2815,6 +2815,32 @@ process GOMC_GEMC_Production {
 }
 
 
+process GOMC_GEMC_Equilibration_Production {
+    cache 'lenient'
+    fair true
+    container "${params.container__gomc}"
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/methods/${METHOD}/production", mode: 'copy', overwrite: false
+    cpus 8
+    debug false
+    input:
+    tuple val(temp_K), val(METHOD), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp),\
+    path(xsc1),path(coor1),path(xsc2),path(coor2),path(chk),path(gemc_eq_conf),path(gemc_prod_conf)
+    output:
+    tuple val(temp_K),val(METHOD),path("GOMC_GEMC_Equilibration.log"),  emit: equil_record
+    tuple val(temp_K),val(METHOD),path("GOMC_GEMC_Production.log"),  emit: record
+
+    shell:
+    """
+    
+    #!/bin/bash
+    cat ${gemc_eq_conf} > local_eq.conf
+    GOMC_CPU_GEMC +p${task.cpus} local_eq.conf > GOMC_GEMC_Equilibration.log
+    cat ${gemc_prod_conf} > local_prod.conf
+    GOMC_CPU_GEMC +p${task.cpus} local_prod.conf > GOMC_GEMC_Production.log
+    """
+}
+
+
 process GOMC_GEMC_Production_Replica {
     //cache 'lenient'
     fair true
@@ -3998,29 +4024,30 @@ workflow build_GEMC_system_wolf {
     ewald_vapor_pressure_data
     ewald_vol_data
     main:
-    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
+    //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
+    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
     combinedChannel=convergenceChannel.combine(methods)
     build_two_box_system_already_calibrated(combinedChannel)
     GOMC_GEMC_Production_Input_Channel = build_two_box_system_already_calibrated.out.system
-    GOMC_GEMC_Production(GOMC_GEMC_Production_Input_Channel)
-    Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
+    GOMC_GEMC_Equilibration_Production(GOMC_GEMC_Production_Input_Channel)
+    Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Equilibration_Production.out.record)
     Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
     Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
     Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out,ewald_density_data)
     Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out,ewald_density_data)
     Plot_GOMC_GEMC_Production_VLE_Per_Density_Line(Collate_GOMC_GEMC_Production.out,ewald_density_data)
 
-    Extract_Volume_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
+    Extract_Volume_GOMC_GEMC_Production(GOMC_GEMC_Equilibration_Production.out.record)
     Extract_Volume_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_Vol
     //Plot_GOMC_GEMC_Production_VLE_Per_Density_Line(Collate_GOMC_GEMC_Production_Vol.out,ewald_vol_data)
 
 
-    Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Production.out.record)
+    Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Equilibration_Production.out.record)
     Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
     Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out,ewald_vapor_pressure_data)
     //Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
     //Plot_GOMC_GEMC_Production_VLE_Per_Density_VP(Collate_GOMC_GEMC_Production_VP.out)
 
-    //Plot_GEMC_Input = GOMC_GEMC_Production.out.record.collect()
+    //Plot_GEMC_Input = GOMC_GEMC_Equilibration_Production.out.record.collect()
     //Collate_GOMC_GEMC_Production(Plot_GEMC_Input)
 }
