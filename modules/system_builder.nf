@@ -420,7 +420,7 @@ process build_two_box_system_already_calibrated {
         gomc_steps_equilibration = 10000 #  set value for paper = 1 * 10**6
     else:
         gomc_steps_equilibration = 100000000
-    gomc_steps_production_expert_mode = int(gomc_steps_equilibration/10) # set value for paper = 1 * 10**6
+    gomc_steps_production_expert_mode = int(gomc_steps_equilibration/20) # set value for paper = 1 * 10**6
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
