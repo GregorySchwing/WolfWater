@@ -1840,8 +1840,8 @@ process plot_grids_two_box {
     #rel_error_weight = 0.75
     #std_weight = 0.25
 
-    rel_error_weight = 0.95
-    std_weight = 0.05
+    rel_error_weight = 0.75
+    std_weight = 0.25
 
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
