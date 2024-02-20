@@ -1840,8 +1840,9 @@ process plot_grids_two_box {
     #rel_error_weight = 0.75
     #std_weight = 0.25
 
-    rel_error_weight = 0.75
+    rel_error_weight = 0.50
     std_weight = 0.25
+    rcut_weight = 0.25
 
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
@@ -1907,6 +1908,15 @@ process plot_grids_two_box {
         # Load the CSV file into a DataFrame
         df = pd.read_csv(file_name, index_col=0)
 
+        # Create a new DataFrame with the same shape as df
+        column_labels_df = pd.DataFrame(index=df.index, columns=df.columns)
+
+        # Fill the DataFrame with column labels as values
+        for i, column in enumerate(df.columns):
+            column_labels_df.iloc[:, i] = column
+
+        print(column_labels_df)
+
         #df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
 
         #for col in df.columns:
@@ -1939,6 +1949,8 @@ process plot_grids_two_box {
         abs_slopes_df = df_slopes.abs()
         abs_df.to_csv(f"abs_df_{model_name}_{box}.csv", header=True, sep=' ', index=True)
 
+        
+        normalized_column_labels_df = scale_dataframe(column_labels_df)
         normalized_df = scale_dataframe(abs_df)
         normalized_df.to_csv(f"normalized_df_{model_name}_{box}.csv", header=True, sep=' ', index=True)
 
@@ -1960,9 +1972,12 @@ process plot_grids_two_box {
 
         normalized_df = normalized_df.multiply(rel_error_weight)
         normalized_std_df = normalized_std_df.multiply(std_weight)
+        normalized_column_labels_df = normalized_column_labels_df.multiply(rcut_weight)
+
         # Calculate Euclidean distance for each tuple across all columns
-        tuple_df = pd.concat([normalized_df, normalized_std_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
-        
+        #tuple_df = pd.concat([normalized_df, normalized_std_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
+        tuple_df = pd.concat([normalized_df, normalized_std_df, normalized_column_labels_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
+
         print(abs_df.head())
         print(std_df.head())
         print(normalized_df.head())
