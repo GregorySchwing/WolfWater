@@ -982,7 +982,7 @@ process build_two_box_system_calibrate {
                                                             }
                                         )
     if (${params.debugging}):
-        NUM_POINTS = 5.0
+        NUM_POINTS = 10.0
     else:
         NUM_POINTS = 50.0
     percentage = 0.80
@@ -1628,9 +1628,6 @@ process plot_grids {
         # Load the CSV file into a DataFrame
         df = pd.read_csv(file_name, index_col=0)
         df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
-
-        desired_y_values = np.arange(-2, 2.1, 0.1)
-
         for col in df.columns:
             x = df.index  # Using DataFrame indices as x-values
             y = df[col]
@@ -1898,6 +1895,7 @@ process plot_grids_two_box {
     ]
 
     model_dict = {}
+    axis_to_f_dict = {}
 
     # Iterate over files and plot each DataFrame in a subplot
     for i, file_name in enumerate(file_list):
@@ -1909,8 +1907,6 @@ process plot_grids_two_box {
         # Load the CSV file into a DataFrame
         df = pd.read_csv(file_name, index_col=0)
         df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
-        desired_y_values = np.arange(-2, 2.1, 0.1)
-
 
         for col in df.columns:
             x = df.index  # Using DataFrame indices as x-values
@@ -1921,8 +1917,10 @@ process plot_grids_two_box {
 
         abs_df = df.abs()   
         abs_slopes_df = df_slopes.abs()
-        
+        abs_df.to_csv(f"abs_df_{model_name}_{box}.csv", header=True, sep=' ', index=True)
+
         normalized_df = scale_dataframe(abs_df)
+        normalized_df.to_csv(f"normalized_df_{model_name}_{box}.csv", header=True, sep=' ', index=True)
 
         # Calculate the standard deviation of each row
         std_series = df.std(axis=1)
@@ -1940,12 +1938,13 @@ process plot_grids_two_box {
         normalized_std_df = normalized_std_df.multiply(std_weight)
         # Calculate Euclidean distance for each tuple across all columns
         tuple_df = pd.concat([normalized_df, normalized_std_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
+        
         print(abs_df.head())
         print(std_df.head())
         print(normalized_df.head())
         print(normalized_std_df.head())
         print(tuple_df.head())
-
+        tuple_df.to_csv(f"tuple_df_{model_name}_{box}.csv", header=True, sep=' ', index=True)
         # Find the row and column of the minimum entry
         min_entry_location = get_smallest_value_index(tuple_df)
 
@@ -1958,7 +1957,7 @@ process plot_grids_two_box {
         print(f"Alpha of Minimum Entry: {min_col}")
         print(f"Slope of Minimum Entry: ",df_slopes[min_row][min_col])
         print(f"F(alpha) of Minimum Entry: ",df[min_row][min_col])
-
+        axis_to_f_dict[i]=df[min_row][min_col]
         # Create a dictionary with the information
         result_dict = {
             'ConvergedRCut': min_row,
@@ -2061,8 +2060,8 @@ process plot_grids_two_box {
     axes2 = axes2.flatten()
 
     # Iterate over subplots in the second figure and set y-axis limits
-    for ax in axes2:
-        ax.set_ylim(-2, 2)
+    for i, ax in enumerate(axes2):
+        ax.set_ylim(-2+axis_to_f_dict[i], 2+axis_to_f_dict[i])
 
     # Save the second figure as 'limited_axes.png'
     fig2.savefig('limited_axes.png', bbox_inches='tight')
