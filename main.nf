@@ -13,6 +13,8 @@ include { build_NVT_system } from './modules/system_builder'
 include { build_GEMC_system } from './modules/system_builder'
 include { build_GEMC_system_Calibrate } from './modules/system_builder'
 include { build_GEMC_system_wolf } from './modules/system_builder'
+include { build_GEMC_system_wolf_inside_vle } from './modules/system_builder'
+
 include { train_model } from './modules/model_builder'
 include { predict_model } from './modules/model_builder'
 include { initialize_scikit_optimize_model } from './modules/scikit_optimize'
@@ -113,6 +115,10 @@ log.info """\
         }
         gemc_system_input = convergenceChannelFlattened.combine(solvent_xml_channel)   
         build_GEMC_system(gemc_system_input)
+        
+        build_GEMC_system_wolf_inside_vle(gemc_system_input,build_GEMC_system.out.ewald_density_data,build_GEMC_system.out.ewald_vapor_pressure_data,build_GEMC_system.out.ewald_vol_data)
+        return
+        
         tempAndDensity = convergenceChannel.map { tuple ->
             def temperature = tuple[0]
             def densities = tuple[1]

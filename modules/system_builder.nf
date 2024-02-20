@@ -257,6 +257,308 @@ process build_solvent_system {
 }
 
 
+process build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve {
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/methods/${METHOD}/input", mode: 'copy', overwrite: false
+    cpus 1
+
+    debug false
+    input:
+    tuple val(temp_K), val(Rho_kg_per_m_cubed1), val(Rho_kg_per_m_cubed2), \
+    path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json"), \
+    path(xsc1, stageAs: "xsc1.xsc"), path(xsc2, stageAs: "xsc2.xsc"),\
+    path(coor1, stageAs: "coor1.coor"), path(coor2, stageAs: "coor2.coor"),\
+    path(path_to_xml), val(METHOD)
+
+    output:
+    tuple val(temp_K), val(METHOD), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
+    path(xsc1),path(coor1),path(xsc2),path(coor2),path("in_GEMC_NVT_eq.conf"),path("in_GEMC_NVT.conf"), emit: system
+    script:
+    """
+     #!/usr/bin/env python
+    from typing import List
+    from pydantic import BaseModel
+    print("hello from ", $temp_K, $Rho_kg_per_m_cubed1,$Rho_kg_per_m_cubed2)
+
+    class Point(BaseModel):
+        density: float
+        temperature: float
+        pressure: float
+        no_mol: float
+        box_length: float
+        rcut_couloumb: float
+
+    # Function to load Pydantic objects from JSON file
+    def load_point_from_json(file_path: str) -> Point:
+        with open(file_path, 'r') as file:
+            json_data = file.read()
+            return Point.model_validate_json(json_data)
+
+    loaded_point1 = load_point_from_json("$statepoint1")
+    print("Loaded point1")
+    print(loaded_point1)
+    loaded_point2 = load_point_from_json("$statepoint2")
+    print("Loaded point2")
+    print(loaded_point2)
+
+    # GOMC Example for the NVT Ensemble using MoSDeF [1, 2, 5-10, 13-17]
+
+    # Import the required packages and specify the force field (FF),
+    # box dimensions, density, and mol ratios [1, 2, 5-10, 13-17].
+
+    import mbuild as mb
+    import unyt as u
+    from mosdef_gomc.formats import charmm_writer as mf_charmm
+    from mosdef_gomc.formats.charmm_writer import Charmm
+    import mosdef_gomc.formats.gomc_conf_writer as gomc_control
+    
+    from   mbuild.lib.molecules.water import WaterSPC
+    import foyer
+
+    forcefield_file_water = "${path_to_xml}"
+
+    liquid_box_length_Ang = loaded_point1.box_length
+
+    liquid_box_density_kg_per_m_cubed = loaded_point1.density
+
+    temperature = loaded_point1.temperature
+    
+    pressure=loaded_point1.pressure
+
+    water = WaterSPC()
+    water.name = 'SPCE'
+
+    molecule_list = [water]
+    residues_list = [water.name]
+    fixed_bonds_angles_list = [water.name]
+
+    ## Build the main liquid simulation box (box 0) for the simulation [1, 2, 13-17]
+
+    liquid_water_box = mb.fill_box(compound=molecule_list,
+                                        n_compounds=int(loaded_point1.no_mol),
+                                        box=[liquid_box_length_Ang / 10,
+                                            liquid_box_length_Ang / 10,
+                                            liquid_box_length_Ang / 10]
+                                        )
+
+    vapor_box_length_Ang = loaded_point2.box_length
+
+    vapor_box_density_kg_per_m_cubed = loaded_point2.density
+
+    temperature = loaded_point1.temperature
+    
+    pressure=loaded_point1.pressure
+
+    vapor_water_box = mb.fill_box(compound=molecule_list,
+                                        n_compounds=int(loaded_point2.no_mol),
+                                        box=[vapor_box_length_Ang / 10,
+                                            vapor_box_length_Ang / 10,
+                                            vapor_box_length_Ang / 10]
+                                        )
+
+    # Destroys water angles!!! Since GOMC is rigid water, dont use this.
+    #water_box.energy_minimize(forcefield=forcefield_file_water , steps=10**5 )
+    # Build the Charmm object, which is required to write the
+    # FF (.inp), psf, pdb, and GOMC control files [1, 2, 5-10, 13-17]
+
+    charmm = mf_charmm.Charmm(liquid_water_box,
+                            'system_liq',
+                            structure_box_1=vapor_water_box,
+                            filename_box_1='system_vap',
+                            ff_filename="system",
+                            forcefield_selection=forcefield_file_water,
+                            residues= residues_list,
+                            gomc_fix_bonds_angles=fixed_bonds_angles_list
+                            )
+
+
+    import pickle
+    # Unpickling the object
+    with open("charmm.pkl", 'wb') as file:
+         pickle.dump(charmm, file)
+
+    charmm.write_inp()
+
+    charmm.write_psf()
+
+    charmm.write_pdb()
+
+    # calc MC steps for gomc equilb
+    # number of simulation steps
+    if (${params.debugging}):
+        gomc_steps_equilibration = 10000 #  set value for paper = 1 * 10**6
+    else:
+        gomc_steps_equilibration = 100000000
+    gomc_steps_production_expert_mode = int(gomc_steps_equilibration/10) # set value for paper = 1 * 10**6
+    gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
+    console_output_freq = 100 # Monte Carlo Steps between console output
+    pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
+    block_ave_output_freq = int(gomc_steps_production/10) # Monte Carlo Steps between console output
+    coordinate_output_freq = int(gomc_steps_production/10) # # set value for paper = 50 * 10**3
+    restart_output_freq = int(gomc_steps_production/10) # # set value for paper = 50 * 10**3
+    if (${params.debugging}):
+        EqSteps = 100 # MCS for equilibration
+        AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
+    else:
+        EqSteps = 100000 # MCS for equilibration
+        AdjSteps = 1000 #MCS for adjusting max displacement, rotation, volume, etc.
+    MC_steps = int(gomc_steps_production)
+    # cutoff and tail correction
+    Rcut_ang = 12 * u.angstrom
+    Rcut_low_ang = 1.0 * u.angstrom
+    LRC = True
+    Exclude = "1-4"
+    RcutCoulomb_box_0=14
+    RcutCoulomb_box_1=14
+
+    # Eq _NVT in GEMC (expert mode) MC move ratios
+    DisFreqEM = 0.45
+    RotFreqEM = 0.35
+    IntraSwapFreqEM = 0.15
+    MultiParticleFreqEM = 0.05
+
+    # MC move ratios
+    DisFreq = 0.35
+    RotFreq = 0.34
+    VolFreq = 0.01
+    MultiParticleFreq=0.00
+    RegrowthFreq = 0.10
+    IntraSwapFreq = 0.00
+    IntraMEMC_2Freq = 0.00
+    CrankShaftFreq = 0.00
+    SwapFreq = 0.20
+    MEMC_2Freq = 0.0
+
+    gomc_output_data_every_X_steps = 50 * 10**3 # # set value for paper = 50 * 10**3
+    # output all data and calc frequecy
+    output_true_list_input = [
+        True,
+        int(gomc_output_data_every_X_steps),
+    ]
+    output_false_list_input = [
+        False,
+        int(gomc_output_data_every_X_steps),
+    ]
+    output_file_prefix_eq="GOMC_GEMC_Equilibration"
+
+    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT_eq.conf', 'GEMC_NVT', gomc_steps_production_expert_mode, ${temp_K},
+                                        Restart=True,
+                                        ExpertMode=True,
+                                        check_input_files_exist=False,
+                                        binCoordinates_box_0="${coor1}",
+                                        extendedSystem_box_0="${xsc1}",
+                                        binCoordinates_box_1="${coor2}",
+                                        extendedSystem_box_1="${xsc2}",
+                                        input_variables_dict={"VDWGeometricSigma": False,
+                                                            "Ewald": False,
+                                                            "ElectroStatic": True,
+                                                            "PRNG": int(0),
+                                                            "Pressure": None,
+                                                            "Potential": "VDW",
+                                                            "LRC": LRC,
+                                                            "Rcut": 12,
+                                                            "RcutLow": 1,
+                                                            "RcutCoulomb_box_0": RcutCoulomb_box_0,
+                                                            "RcutCoulomb_box_1": RcutCoulomb_box_1,
+                                                            "Exclude": Exclude,
+                                                            "DisFreq": DisFreqEM,
+                                                            "RotFreq": RotFreqEM,
+                                                            "IntraSwapFreq": IntraSwapFreqEM,
+                                                            "MultiParticleFreq": MultiParticleFreqEM,
+                                                            "OutputName": output_file_prefix_eq,
+                                                            "EqSteps": EqSteps,
+                                                            "AdjSteps":AdjSteps,
+                                                            "PressureCalc": [True, pressure_calc_freq],
+                                                            "RestartFreq": [True, restart_output_freq],
+                                                            "CheckpointFreq": [True, restart_output_freq],
+                                                            "DCDFreq": [True, coordinate_output_freq],
+                                                            "ConsoleFreq": [True, console_output_freq],
+                                                            "BlockAverageFreq":[True, block_ave_output_freq],
+                                                            "HistogramFreq": output_false_list_input,
+                                                            "CoordinatesFreq": output_false_list_input,
+                                                            "CBMC_First": 12,
+                                                            "CBMC_Nth": 10,
+                                                            "CBMC_Ang": 50,
+                                                            "CBMC_Dih": 50,
+                                                            }
+                                        )
+
+    kind_pot = "${METHOD}".split('_')
+    file1 = open("in_GEMC_NVT_eq.conf", "a")
+    defAlphaLine = "{box}\\t{val}\\n".format(box="Wolf", val="True")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfPotential", val=kind_pot[1])
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=0.12)
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="1", val=0.12)
+    file1.writelines(defAlphaLine)
+
+    output_file_prefix="GOMC_GEMC_Production"
+
+    gomc_control.write_gomc_control_file(charmm, 'in_GEMC_NVT.conf', 'GEMC_NVT', MC_steps, ${temp_K},
+                                        Restart=True,
+                                        check_input_files_exist=False,
+                                        binCoordinates_box_0=output_file_prefix_eq+"_BOX_0_restart.coor",
+                                        extendedSystem_box_0=output_file_prefix_eq+"_BOX_0_restart.xsc",
+                                        binCoordinates_box_1=output_file_prefix_eq+"_BOX_1_restart.coor",
+                                        extendedSystem_box_1=output_file_prefix_eq+"_BOX_1_restart.xsc",
+                                        input_variables_dict={"VDWGeometricSigma": False,
+                                                            "Ewald": False,
+                                                            "ElectroStatic": True,
+                                                            "PRNG": int(0),
+                                                            "Pressure": None,
+                                                            "Potential": "VDW",
+                                                            "LRC": LRC,
+                                                            "Rcut": 12,
+                                                            "RcutLow": 1,
+                                                            "RcutCoulomb_box_0": RcutCoulomb_box_0,
+                                                            "RcutCoulomb_box_1": RcutCoulomb_box_1,
+                                                            "Exclude": Exclude,
+                                                            "DisFreq": DisFreq,
+                                                            "VolFreq": VolFreq,
+                                                            "RotFreq": RotFreq,
+                                                            "MultiParticleFreq": MultiParticleFreq,
+                                                            "RegrowthFreq": RegrowthFreq,
+                                                            "IntraSwapFreq": IntraSwapFreq,
+                                                            "IntraMEMC-2Freq": IntraMEMC_2Freq,
+                                                            "CrankShaftFreq": CrankShaftFreq,
+                                                            "SwapFreq": SwapFreq,
+                                                            "MEMC-2Freq": MEMC_2Freq,
+                                                            "OutputName": output_file_prefix,
+                                                            "EqSteps": EqSteps,
+                                                            "AdjSteps":AdjSteps,
+                                                            "PressureCalc": [True, pressure_calc_freq],
+                                                            "RestartFreq": [True, restart_output_freq],
+                                                            "CheckpointFreq": [True, restart_output_freq],
+                                                            "DCDFreq": [True, coordinate_output_freq],
+                                                            "ConsoleFreq": [True, console_output_freq],
+                                                            "BlockAverageFreq":[True, block_ave_output_freq],
+                                                            "HistogramFreq": output_false_list_input,
+                                                            "CoordinatesFreq": output_false_list_input,
+                                                            "CBMC_First": 12,
+                                                            "CBMC_Nth": 10,
+                                                            "CBMC_Ang": 50,
+                                                            "CBMC_Dih": 50,
+                                                            }
+                                        )
+
+    kind_pot = "${METHOD}".split('_')
+    file1 = open("in_GEMC_NVT.conf", "a")
+    defAlphaLine = "{box}\\t{val}\\n".format(box="Wolf", val="True")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfPotential", val=kind_pot[1])
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=0.12)
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="1", val=0.12)
+    file1.writelines(defAlphaLine)
+    """
+}
+
+
 process build_two_box_system_already_calibrated {
     cache 'lenient'
     fair true
@@ -420,7 +722,7 @@ process build_two_box_system_already_calibrated {
         gomc_steps_equilibration = 10000 #  set value for paper = 1 * 10**6
     else:
         gomc_steps_equilibration = 100000000
-    gomc_steps_production_expert_mode = int(gomc_steps_equilibration/20) # set value for paper = 1 * 10**6
+    gomc_steps_production_expert_mode = int(gomc_steps_equilibration/10) # set value for paper = 1 * 10**6
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
     console_output_freq = 100 # Monte Carlo Steps between console output
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
@@ -2896,7 +3198,7 @@ process GOMC_GEMC_Equilibration_Production {
     debug false
     input:
     tuple val(temp_K), val(METHOD), path(pdb1), path(psf1), path(pdb2), path(psf2), path(inp),\
-    path(xsc1),path(coor1),path(xsc2),path(coor2),path(chk),path(gemc_eq_conf),path(gemc_prod_conf)
+    path(xsc1),path(coor1),path(xsc2),path(coor2),path(gemc_eq_conf),path(gemc_prod_conf)
     output:
     tuple val(temp_K),val(METHOD),path("GOMC_GEMC_Equilibration.log"),  emit: equil_record
     tuple val(temp_K),val(METHOD),path("GOMC_GEMC_Production.log"),  emit: record
@@ -4120,6 +4422,42 @@ workflow build_GEMC_system_wolf {
     combinedChannel=convergenceChannel.combine(methods)
     build_two_box_system_already_calibrated(combinedChannel)
     GOMC_GEMC_Production_Input_Channel = build_two_box_system_already_calibrated.out.system
+    GOMC_GEMC_Equilibration_Production(GOMC_GEMC_Production_Input_Channel)
+    Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Equilibration_Production.out.record)
+    Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
+    Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
+    Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out,ewald_density_data)
+    Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out,ewald_density_data)
+    Plot_GOMC_GEMC_Production_VLE_Per_Density_Line(Collate_GOMC_GEMC_Production.out,ewald_density_data)
+
+    Extract_Volume_GOMC_GEMC_Production(GOMC_GEMC_Equilibration_Production.out.record)
+    Extract_Volume_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_Vol
+    //Plot_GOMC_GEMC_Production_VLE_Per_Density_Line(Collate_GOMC_GEMC_Production_Vol.out,ewald_vol_data)
+
+
+    Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Equilibration_Production.out.record)
+    Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
+    Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out,ewald_vapor_pressure_data)
+    //Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
+    //Plot_GOMC_GEMC_Production_VLE_Per_Density_VP(Collate_GOMC_GEMC_Production_VP.out)
+
+    //Plot_GEMC_Input = GOMC_GEMC_Equilibration_Production.out.record.collect()
+    //Collate_GOMC_GEMC_Production(Plot_GEMC_Input)
+}
+
+
+workflow build_GEMC_system_wolf_inside_vle {
+    take:
+    convergenceChannel
+    ewald_density_data
+    ewald_vapor_pressure_data
+    ewald_vol_data
+    main:
+    //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
+    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
+    combinedChannel=convergenceChannel.combine(methods)
+    build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve(combinedChannel)
+    GOMC_GEMC_Production_Input_Channel = build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve.out.system
     GOMC_GEMC_Equilibration_Production(GOMC_GEMC_Production_Input_Channel)
     Extract_Density_GOMC_GEMC_Production(GOMC_GEMC_Equilibration_Production.out.record)
     Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
