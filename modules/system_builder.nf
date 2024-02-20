@@ -1906,14 +1906,34 @@ process plot_grids_two_box {
 
         # Load the CSV file into a DataFrame
         df = pd.read_csv(file_name, index_col=0)
-        df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
 
-        for col in df.columns:
-            x = df.index  # Using DataFrame indices as x-values
-            y = df[col]
+        #df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
+
+        #for col in df.columns:
+        #    x = df.index  # Using DataFrame indices as x-values
+        #    y = df[col]
+
+        #    # Calculate the slope using numpy's gradient function
+        #    df_slopes[col] = np.gradient(y, x)
+
+        # Transpose the DataFrame
+        df_transposed = df.T
+
+        # Create a new DataFrame to store slopes
+        df_slopes = pd.DataFrame(index=df_transposed.index, columns=df_transposed.columns)
+
+        # Iterate over rows (which are now columns after transposing)
+        for row in df_transposed.index:
+            x = df_transposed.columns  # Using DataFrame columns as x-values
+            y = df_transposed.loc[row]
 
             # Calculate the slope using numpy's gradient function
-            df_slopes[col] = np.gradient(y, x)
+            df_slopes.loc[row] = np.gradient(y, x)
+
+        # Transpose the result back to the original shape
+        df_slopes = df_slopes.T
+
+        print(df_slopes)
 
         abs_df = df.abs()   
         abs_slopes_df = df_slopes.abs()
@@ -1930,8 +1950,12 @@ process plot_grids_two_box {
 
         std_df.index = df.index
         std_df.to_csv(f"std_{model_name}_{box}.csv", header=True, sep=' ', index=True)
+        
+        
         # Convert the reshaped data into a DataFrame with original column names and index
-        normalized_std_df = scale_dataframe(std_df)
+        #normalized_std_df = scale_dataframe(std_df)
+        normalized_std_df = scale_dataframe(df_slopes)
+
         normalized_std_df.to_csv(f"norm_std_{model_name}_{box}.csv", header=True, sep=' ', index=True)
 
         normalized_df = normalized_df.multiply(rel_error_weight)
