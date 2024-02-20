@@ -1790,7 +1790,7 @@ process plot_grids_two_box {
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/calibration/plots", mode: 'copy', overwrite: false
     cpus 1
 
-    debug true
+    debug false
     input:
     tuple val(temp_K), path(grids)
     output:
@@ -1822,11 +1822,23 @@ process plot_grids_two_box {
         df_scaled = pd.DataFrame(reshaped_data, columns=df.columns, index=df.index)
         
         return df_scaled
+
+    def get_smallest_value_index(df):
+        # Find the smallest value in each column
+        smallest_in_cols = df.min()
+
+        # Get the column with the overall smallest value
+        min_col = smallest_in_cols.idxmin()
+
+        # Find the row with the smallest value in the column with the smallest value
+        min_row = df[min_col].idxmin()
+
+        return min_row, min_col
     #rel_error_weight = 0.75
     #std_weight = 0.25
 
-    rel_error_weight = 0.0
-    std_weight = 1.0
+    rel_error_weight = 0.75
+    std_weight = 0.25
 
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
@@ -1908,10 +1920,10 @@ process plot_grids_two_box {
 
         # Calculate the standard deviation of each row
         std_series = df.std(axis=1)
-        # Transpose the series
-        std_transposed = std_series.transpose()
-        # Create a new DataFrame by duplicating the transposed series with column names from the original DataFrame
-        std_df = pd.DataFrame([std_transposed.values] * len(df), columns=df.columns)
+        # Create a new DataFrame with standard deviations assigned to all elements in each row
+        std_df = pd.DataFrame(index=df.index, columns=df.columns)
+        std_df[:] = std_series.values[:, None]
+
         std_df.index = df.index
         std_df.to_csv(f"std_{model_name}_{box}.csv", header=True, sep=' ', index=True)
         # Convert the reshaped data into a DataFrame with original column names and index
@@ -1929,12 +1941,11 @@ process plot_grids_two_box {
         print(tuple_df.head())
 
         # Find the row and column of the minimum entry
-        min_entry_location = tuple_df.unstack().idxmin()
+        min_entry_location = get_smallest_value_index(tuple_df)
 
-        #min_entry_location = std_df.unstack().idxmin()
         print(box, min_entry_location)
         # Extract row and column indices
-        min_row, min_col = min_entry_location
+        min_col,min_row = min_entry_location
         print(f"Model name: {model_name}")
         print(f"Box: {box}")
         print(f"RCut of Minimum Entry: {min_row}")
