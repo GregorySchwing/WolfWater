@@ -876,21 +876,27 @@ process build_two_box_system_calibrate {
     # calc MC steps for gomc equilb
     # number of simulation steps
     if (${params.debugging}):
-        gomc_steps_equilibration = 10000 #  set value for paper = 1 * 10**6
+        #gomc_steps_equilibration = 10000 #  set value for paper = 1 * 10**6
+        gomc_steps_equilibration = 3
     else:
-        gomc_steps_equilibration = 10000000
+        #gomc_steps_equilibration = 10000000
+        gomc_steps_equilibration = 3
     gomc_steps_production = gomc_steps_equilibration # set value for paper = 1 * 10**6
-    console_output_freq = 100 # Monte Carlo Steps between console output
+    console_output_freq = 1 # Monte Carlo Steps between console output
     pressure_calc_freq = 10000 # Monte Carlo Steps for pressure calculation
     block_ave_output_freq = int(gomc_steps_production/10) # Monte Carlo Steps between console output
     coordinate_output_freq = int(gomc_steps_production/10) # # set value for paper = 50 * 10**3
     restart_output_freq = int(gomc_steps_production/10) # # set value for paper = 50 * 10**3
     if (${params.debugging}):
-        EqSteps = 100 # MCS for equilibration
-        AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
+        #EqSteps = 100 # MCS for equilibration
+        #AdjSteps = 10 #MCS for adjusting max displacement, rotation, volume, etc.
+        EqSteps = 2 # MCS for equilibration
+        AdjSteps = 1 #MCS for adjusting max displacement, rotation, volume, etc.
     else:
-        EqSteps = 1000 # MCS for equilibration
-        AdjSteps = 100 #MCS for adjusting max displacement, rotation, volume, etc.
+        #EqSteps = 1000 # MCS for equilibration
+        #AdjSteps = 100 #MCS for adjusting max displacement, rotation, volume, etc.
+        EqSteps = 2 # MCS for equilibration
+        AdjSteps = 1 #MCS for adjusting max displacement, rotation, volume, etc.
     MC_steps = int(gomc_steps_production)
     # cutoff and tail correction
     Rcut_ang = 12 * u.angstrom
@@ -961,12 +967,12 @@ process build_two_box_system_calibrate {
                                                             "OutputName": output_file_prefix,
                                                             "EqSteps": EqSteps,
                                                             "AdjSteps":AdjSteps,
-                                                            "PressureCalc": [True, pressure_calc_freq],
-                                                            "RestartFreq": [True, restart_output_freq],
-                                                            "CheckpointFreq": [True, restart_output_freq],
-                                                            "DCDFreq": [True, coordinate_output_freq],
+                                                            "PressureCalc": output_false_list_input,
+                                                            "RestartFreq": output_false_list_input,
+                                                            "CheckpointFreq": output_false_list_input,
+                                                            "DCDFreq": output_false_list_input,
                                                             "ConsoleFreq": [True, console_output_freq],
-                                                            "BlockAverageFreq":[True, block_ave_output_freq],
+                                                            "BlockAverageFreq":output_false_list_input,
                                                             "HistogramFreq": output_false_list_input,
                                                             "CoordinatesFreq": output_false_list_input,
                                                             "CBMC_First": 12,
