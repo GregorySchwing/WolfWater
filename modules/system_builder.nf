@@ -741,7 +741,7 @@ process build_two_box_system {
 
 
 process build_two_box_system_calibrate {
-    //cache 'lenient'
+    cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/calibration/input", mode: 'copy', overwrite: false
@@ -1784,7 +1784,7 @@ process plot_grids {
 
 
 process plot_grids_two_box {
-    //cache 'lenient'
+    cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/calibration/plots", mode: 'copy', overwrite: false
@@ -2933,7 +2933,7 @@ process GOMC_GEMC_Production_Replica {
 
 
 process GOMC_GEMC_Calibration {
-    //cache 'lenient'
+    cache 'lenient'
     fair true
     container "${params.container__gomc}"
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/calibration/production", mode: 'copy', overwrite: false
