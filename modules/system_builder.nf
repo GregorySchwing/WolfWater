@@ -982,19 +982,23 @@ process build_two_box_system_calibrate {
                                                             }
                                         )
     if (${params.debugging}):
-        NUM_POINTS = 10.0
+        NUM_POINTS = 50.0
+        NUM_ALPHA_POINTS = 10.0
+        NUM_RCUT_POINTS = 10.0
     else:
         NUM_POINTS = 50.0
-    percentage = 0.80
+        NUM_ALPHA_POINTS = 30.0
+        NUM_RCUT_POINTS = 10.0
+    percentage = 1.0
     ALPHA_START = 0.0
-    ALPHA_END = 0.5
-    ALPHA_DELTA = (ALPHA_END-ALPHA_START)/(NUM_POINTS-1)
+    ALPHA_END = 0.3
+    ALPHA_DELTA = (ALPHA_END-ALPHA_START)/(NUM_ALPHA_POINTS-1)
     RCC_START = 10.0
-    RCC_END_BOX_0 = (float(liquid_box_length_Ang)/2.0)*percentage
-    RCC_DELTA_BOX_0 = (RCC_END_BOX_0-RCC_START)/(NUM_POINTS-1)
-    RCC_END_BOX_1 = (float(vapor_box_length_Ang)/2.0)*percentage
-    RCC_DELTA_BOX_1 = (RCC_END_BOX_1-RCC_START)/(NUM_POINTS-1)
-    file1 = open("in_GEMC_NVT.conf", "a")
+    RCC_END_BOX_0 = (float(liquid_box_0_length_Ang)/2.0)*percentage
+    RCC_DELTA_BOX_0 = (RCC_END_BOX_0-RCC_START)/(NUM_RCUT_POINTS-1)
+    RCC_END_BOX_1 = (float(liquid_box_1_length_Ang)/2.0)*percentage
+    RCC_DELTA_BOX_1 = (RCC_END_BOX_1-RCC_START)/(NUM_RCUT_POINTS-1)
+    file1 = open("calibration.conf", "a")
     defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
     file1.writelines(defAlphaLine)
     defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start=ALPHA_START,\
