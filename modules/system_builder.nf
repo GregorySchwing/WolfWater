@@ -995,7 +995,7 @@ process build_two_box_system_calibrate {
     RCC_END_BOX_1 = (float(vapor_box_length_Ang)/2.0)*percentage
     RCC_DELTA_BOX_1 = (RCC_END_BOX_1-RCC_START)/(NUM_POINTS-1)
     file1 = open("in_GEMC_NVT.conf", "a")
-    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file=int(gomc_steps_production/10))
+    defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
     file1.writelines(defAlphaLine)
     defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start=ALPHA_START,\
     end=ALPHA_END,delta=ALPHA_DELTA)
