@@ -1634,11 +1634,7 @@ process plot_grids {
 
 
         abs_df = df.abs()
-        abs_slopes_df = df_slopes.abs()
-
         normalized_df=(abs_df-abs_df.min())/(abs_df.max()-abs_df.min())
-        normalized_slopes_df=(abs_slopes_df-abs_slopes_df.min())/(abs_slopes_df.max()-abs_slopes_df.min())
-
         # Calculate Euclidean distance for each tuple across all columns
         tuple_df = pd.concat([normalized_df, normalized_slopes_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
 
@@ -1794,12 +1790,14 @@ process plot_grids_two_box {
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/calibration/plots", mode: 'copy', overwrite: false
     cpus 1
 
-    debug false
+    debug true
     input:
     tuple val(temp_K), path(grids)
     output:
     tuple path("grids*.png"), path("limited_axes.png"), emit: figs
     tuple val(temp_K), path("convergence_obj.json"), emit: convergence
+    tuple val(temp_K), path("*.csv"), emit: convergence2
+
     script:
     """
     #!/usr/bin/env python
@@ -1807,11 +1805,28 @@ process plot_grids_two_box {
     import matplotlib.pyplot as plt
     import re
     import numpy as np
-    #rel_error_weight = 0.75
-    #slope_weight = 0.25
+    from sklearn.preprocessing import MinMaxScaler
 
-    rel_error_weight = 1.0
-    slope_weight = 0.0
+    def scale_dataframe(df):
+        # Flatten the DataFrame
+        flattened_df = df.values.flatten().reshape(-1, 1)
+
+        # Perform MinMax scaling
+        scaler = MinMaxScaler()
+        scaled_data = scaler.fit_transform(flattened_df)
+
+        # Reshape the scaled data back to the original dimensions
+        reshaped_data = scaled_data.reshape(df.shape)
+
+        # Convert the reshaped data into a DataFrame with original column names and index
+        df_scaled = pd.DataFrame(reshaped_data, columns=df.columns, index=df.index)
+        
+        return df_scaled
+    #rel_error_weight = 0.75
+    #std_weight = 0.25
+
+    rel_error_weight = 0.0
+    std_weight = 1.0
 
     # Function to extract model name from file name using regex
     def extract_model_name(file_name):
@@ -1876,8 +1891,8 @@ process plot_grids_two_box {
         # Load the CSV file into a DataFrame
         df = pd.read_csv(file_name, index_col=0)
         df_slopes = pd.DataFrame(index=df.index, columns=df.columns)
-
         desired_y_values = np.arange(-2, 2.1, 0.1)
+
 
         for col in df.columns:
             x = df.index  # Using DataFrame indices as x-values
@@ -1886,25 +1901,38 @@ process plot_grids_two_box {
             # Calculate the slope using numpy's gradient function
             df_slopes[col] = np.gradient(y, x)
 
-
-        abs_df = df.abs()
+        abs_df = df.abs()   
         abs_slopes_df = df_slopes.abs()
+        
+        normalized_df = scale_dataframe(abs_df)
 
-        normalized_df=(abs_df-abs_df.min())/(abs_df.max()-abs_df.min())
-        normalized_slopes_df=(abs_slopes_df-abs_slopes_df.min())/(abs_slopes_df.max()-abs_slopes_df.min())
+        # Calculate the standard deviation of each row
+        std_series = df.std(axis=1)
+        # Transpose the series
+        std_transposed = std_series.transpose()
+        # Create a new DataFrame by duplicating the transposed series with column names from the original DataFrame
+        std_df = pd.DataFrame([std_transposed.values] * len(df), columns=df.columns)
+        std_df.index = df.index
+        std_df.to_csv(f"std_{model_name}_{box}.csv", header=True, sep=' ', index=True)
+        # Convert the reshaped data into a DataFrame with original column names and index
+        normalized_std_df = scale_dataframe(std_df)
+        normalized_std_df.to_csv(f"norm_std_{model_name}_{box}.csv", header=True, sep=' ', index=True)
 
         normalized_df = normalized_df.multiply(rel_error_weight)
-        normalized_slopes_df = normalized_slopes_df.multiply(slope_weight)
-
+        normalized_std_df = normalized_std_df.multiply(std_weight)
         # Calculate Euclidean distance for each tuple across all columns
-        #tuple_df = pd.concat([normalized_df, normalized_slopes_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
+        tuple_df = pd.concat([normalized_df, normalized_std_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
+        print(abs_df.head())
+        print(std_df.head())
+        print(normalized_df.head())
+        print(normalized_std_df.head())
+        print(tuple_df.head())
 
         # Find the row and column of the minimum entry
-        #min_entry_location = tuple_df.unstack().idxmin()
+        min_entry_location = tuple_df.unstack().idxmin()
 
-        min_entry_location = abs_df.unstack().idxmin()
-
-
+        #min_entry_location = std_df.unstack().idxmin()
+        print(box, min_entry_location)
         # Extract row and column indices
         min_row, min_col = min_entry_location
         print(f"Model name: {model_name}")
