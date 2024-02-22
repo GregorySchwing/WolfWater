@@ -3910,7 +3910,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
                 ew_dens = data['density'][i]
         # Plotting bar chart for each method
         #axs[i].bar(methods, densities, color='blue')
-        axs[i].scatter(methods, densities, c=colors)
+        axs[i].scatter(methods, densities, c=colors[:len(methods)])
         axs[i].axhline(y=ew_dens, color="black", linestyle='--', linewidth=2)
         axs[i].tick_params(labelbottom=False)
     # Save the plot as a PNG file
