@@ -102,7 +102,7 @@ log.info """\
         file(params.path_to_nvt_template), file(params.path_to_npt_template)] ).collect()
         system_input = solventData.combine(solvent_xml_channel)     
         build_NVT_system(system_input,jinja_channel)        
-        convergenceChannel = build_NVT_system.out.restart_files.groupTuple(by:0,size:2,remainder:false)
+        convergenceChannel = build_NVT_system.out.restart_files.groupTuple(by:0,size:14,remainder:false)
         convergenceChannelFlattened = convergenceChannel.map { tuple ->
             def temperature = tuple[0]
             def densities = tuple[1]
