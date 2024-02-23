@@ -4373,7 +4373,157 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
     input: 
     path(data_csv)
     path(ewald_data_csv, stageAs: "ewald_merged.csv")
-    output: tuple path ("vapor_pressure_box_0.png"), path ("vapor_pressure_box_1.png")
+    output: path ("vp.png")
+
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import numpy as np
+    # Load the CSV file into a pandas DataFrame
+    df = pd.read_csv("$data_csv", sep='\t')
+    df_ew = pd.read_csv("$ewald_data_csv", sep='\t')
+
+    import hashlib
+    def generate_color(method):
+        # Generate a unique color based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
+        # Take the first six characters of the hexadecimal digest to represent the color
+        color = '#' + hex_dig[:6]
+        return color
+
+    def generate_marker(method):
+        # Generate a unique marker based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
+        markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 's']
+        # Use the ASCII value of the first character of the method name to select the marker
+        marker_index = int(hex_dig, 16) % len(markers)
+        return markers[marker_index]
+
+    def generate_fillstyle(method):
+        # Generate a unique fill style based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
+        fillstyles = ['full', 'none']
+        fill_index = int(hex_dig, 16) % len(fillstyles)
+        return fillstyles[fill_index]
+
+    def generate_linestyle(method):
+        # Generate a unique linestyle based on the method name
+        linestyles = ['-', '--', '-.', ':']
+        # Use the ASCII value of the last character of the method name to select the linestyle
+        linestyle_index = ord(method[-1]) % len(linestyles)
+        return linestyles[linestyle_index]
+
+    def plot_data(df, df_ew, ax, box_name):
+        method_data = {}
+        # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern
+        for idx, col in enumerate(df.columns):
+            temperature = col.split('_')[0]
+            method = '_'.join(col.split('_')[1:-2])
+            if box_name in col:
+                # Append temperature and vp to the corresponding method in the dictionary
+                if method not in method_data:
+                    method_data[method] = {'temperature': [], 'vp': []}
+                method_data[method]['temperature'].append(int(temperature))
+                method_data[method]['vp'].append(df[col].mean())
+
+        for idx, col in enumerate(df_ew.columns):
+            temperature = col.split('_')[0]
+            method = "EWALD"
+            if box_name in col:
+                # Append temperature and vp to the corresponding method in the dictionary
+                if method not in method_data:
+                    method_data[method] = {'temperature': [], 'vp': []}
+                method_data[method]['temperature'].append(int(temperature))
+                method_data[method]['vp'].append(df_ew[col].mean())
+
+
+        # Sort temperature and vp lists for each method by vp
+        for method, data in method_data.items():
+            temp_density = list(zip(data['temperature'], data['vp']))
+            temp_density.sort(key=lambda x: x[1])  # Sort by vp
+            method_data[method]['temperature'], method_data[method]['vp'] = zip(*temp_density)
+        # Calculate 1/temperature
+        temperature_tuple = method_data["EWALD"]['temperature']
+        inverse_temperature = tuple(1 / temp for temp in temperature_tuple)
+        # Calculate ln(vp)
+        ln_vp = np.log(method_data["EWALD"]['vp'])
+        ax.plot(inverse_temperature,ln_vp, label=f'EWALD', linestyle='-', color="black", marker='o', fillstyle="full")
+        for method, data in method_data.items():
+            if method != "EWALD":
+                #marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
+                #ax.plot(data['vp'], data['temperature'], label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+                marker = generate_marker(method)
+                color = generate_color(method)
+                linestyle = generate_linestyle(method)
+                fillstyle = generate_fillstyle(method)
+                # Calculate 1/temperature
+                temperature_tuple = data['temperature']
+                inverse_temperature = tuple(1 / temp for temp in temperature_tuple)
+                # Calculate ln(vp)
+                ln_vp = np.log(data['vp'])
+                #ax.plot(data['temperature'],data['vp'],  label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+                ax.plot(inverse_temperature,ln_vp, label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+        #ax.set_ylabel('Vapor Pressure', fontsize=18)
+        #ax.set_xlabel('Temperature', fontsize=18)
+        ax.set_xlabel(r'\$1/T \\, (K^{-1})\$', fontsize=18)  # LaTeX formatted x label
+        ax.set_ylabel(r'\$\\ln P \\, (bar)\$', fontsize=18)  # LaTeX formatted y label
+        #if box_name == "BOX_1":
+        #ax.set_xscale('log')
+        #ax.set_xticks([0.001, 0.01, 0.1, 1, 10, 100])
+        #ax.set_xticklabels(['\$10^{-3}\$', '\$10^{-2}\$', '\$10^{-1}\$', '\$10^{0}\$', '\$10^{1}\$', '\$10^{2}\$'])
+
+        if box_name == "BOX_0":
+            #ax.set_xticks([400, 600, 800, 1000, 1200])
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            ax.legend(by_label.values(), by_label.keys(), fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+        
+
+    # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
+    method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
+        df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
+        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 's',],
+        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':', '-'],  # Different line styles
+        ['full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full'],  # Alternating fill pattern
+        ['red', 'red', 'blue', 'blue', 'green', 'yellow', 'orange', 'green', 'green', 'grey', 'purple'],  # Alternating colors
+    )}
+
+    # Create a figure with two subplots
+    fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+
+    # Plot for Box 0
+    #axs[1].set_title('Box 0')
+    plot_data(df, df_ew, axs[1], "BOX_0")
+
+    # Plot for Box 1
+    #axs[0].set_title('Box 1')
+    plot_data(df, df_ew, axs[0], "BOX_1")
+
+    plt.tight_layout()
+    # Save the plot as a PNG file
+    plt.savefig('vp.png', bbox_inches='tight')
+    """
+}
+
+
+process Plot_GOMC_GEMC_Production_VLE_VP_Deviation { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
+    cpus 1
+    debug false
+    input: 
+    path(data_csv)
+    path(ewald_data_csv, stageAs: "ewald_merged.csv")
+    output: path ("vp_deviation.png")
 
     script:
     """
@@ -4384,104 +4534,123 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
     # Load the CSV file into a pandas DataFrame
     df = pd.read_csv("$data_csv", sep='\t')
     df_ew = pd.read_csv("$ewald_data_csv", sep='\t')
+
+    import hashlib
+    def generate_color(method):
+        # Generate a unique color based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
+        # Take the first six characters of the hexadecimal digest to represent the color
+        color = '#' + hex_dig[:6]
+        return color
+
+    def generate_marker(method):
+        # Generate a unique marker based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
+        markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 's']
+        # Use the ASCII value of the first character of the method name to select the marker
+        marker_index = int(hex_dig, 16) % len(markers)
+        return markers[marker_index]
+
+    def generate_fillstyle(method):
+        # Generate a unique fill style based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
+        fillstyles = ['full', 'none']
+        fill_index = int(hex_dig, 16) % len(fillstyles)
+        return fillstyles[fill_index]
+
+    def generate_linestyle(method):
+        # Generate a unique linestyle based on the method name
+        linestyles = ['-', '--', '-.', ':']
+        # Use the ASCII value of the last character of the method name to select the linestyle
+        linestyle_index = ord(method[-1]) % len(linestyles)
+        return linestyles[linestyle_index]
+
+    def plot_data(df, df_ew, ax, box_name):
+        method_data = {}
+        # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern
+        for idx, col in enumerate(df.columns):
+            temperature = col.split('_')[0]
+            method = '_'.join(col.split('_')[1:-2])
+            if box_name in col:
+                # Append temperature and vp to the corresponding method in the dictionary
+                if method not in method_data:
+                    method_data[method] = {'temperature': [], 'vp': []}
+                method_data[method]['temperature'].append(int(temperature))
+                method_data[method]['vp'].append(df[col].mean())
+
+        for idx, col in enumerate(df_ew.columns):
+            temperature = col.split('_')[0]
+            method = "EWALD"
+            if box_name in col:
+                # Append temperature and vp to the corresponding method in the dictionary
+                if method not in method_data:
+                    method_data[method] = {'temperature': [], 'vp': []}
+                method_data[method]['temperature'].append(int(temperature))
+                method_data[method]['vp'].append(df_ew[col].mean())
+
+
+        # Sort temperature and vp lists for each method by vp
+        for method, data in method_data.items():
+            temp_density = list(zip(data['temperature'], data['vp']))
+            temp_density.sort(key=lambda x: x[1])  # Sort by vp
+            method_data[method]['temperature'], method_data[method]['vp'] = zip(*temp_density)
+
+        #ax.plot(method_data["EWALD"]['temperature'], method_data["EWALD"]['vp'], label=f'EWALD', linestyle='-', color="black", marker='o', fillstyle="full")
+        for method, data in method_data.items():
+            if method != "EWALD":
+                #marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
+                #ax.plot(data['vp'], data['temperature'], label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+                marker = generate_marker(method)
+                color = generate_color(method)
+                linestyle = generate_linestyle(method)
+                fillstyle = generate_fillstyle(method)
+                #ax.plot(data['temperature'],data['vp'],  label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+                ewald_vp = method_data["EWALD"]['vp']
+                relative_error = [100*(vp - ewald_vp[idx]) / ewald_vp[idx] for idx, vp in enumerate(data['vp'])]
+                ax.plot(data['temperature'], relative_error, label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+        ax.set_ylabel(r'\$100 \\times (p_{\\text{Ewald}} - p_{\\text{Wolf}})/p_{\\text{Ewald}}\$', fontsize=18)
+        ax.set_xlabel('Temperature', fontsize=18)
+
+        #if box_name == "BOX_1":
+        #ax.set_xscale('log')
+        #ax.set_xticks([0.001, 0.01, 0.1, 1, 10, 100])
+        #ax.set_xticklabels(['\$10^{-3}\$', '\$10^{-2}\$', '\$10^{-1}\$', '\$10^{0}\$', '\$10^{1}\$', '\$10^{2}\$'])
+
+        if box_name == "BOX_0":
+            #ax.set_xticks([400, 600, 800, 1000, 1200])
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            ax.legend(by_label.values(), by_label.keys(), fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+        
+
     # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
     method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
         df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
-        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h','s',],
-        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':','-'],  # Different line styles        
+        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 's',],
+        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':', '-'],  # Different line styles
         ['full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full'],  # Alternating fill pattern
         ['red', 'red', 'blue', 'blue', 'green', 'yellow', 'orange', 'green', 'green', 'grey', 'purple'],  # Alternating colors
     )}
-    method_data_box_0 = {}
-    method_data_box_1 = {}
+
+    # Create a figure with two subplots
+    fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+
     # Plot for Box 0
-    plt.figure(figsize=(10, 6))
-
-    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
-    for idx, col in enumerate(df.columns):
-        if 'BOX_0' in col:
-            temperature = col.split('_')[0]
-            method = col.split('_')[1] + '_' + col.split('_')[2]
-            # Append temperature and density to the corresponding method in the dictionary
-            if method not in method_data_box_0:
-                method_data_box_0[method] = {'temperature': [], 'vapor_pressure': []}
-            method_data_box_0[method]['temperature'].append(int(temperature))
-            method_data_box_0[method]['vapor_pressure'].append(df[col].mean())
-    
-    for idx, col in enumerate(df_ew.columns):
-        if 'BOX_0' in col:
-            temperature = col.split('_')[0]
-            method = "EWALD"
-            if method not in method_data_box_0:
-                method_data_box_0[method] = {'temperature': [], 'vapor_pressure': []}
-            method_data_box_0[method]['temperature'].append(int(temperature))
-            method_data_box_0[method]['vapor_pressure'].append(df_ew[col].mean())
-
-
-    for idx, col in enumerate(df_ew.columns):
-        if 'BOX_1' in col:
-            temperature = col.split('_')[0]
-            method = "EWALD"
-            if method not in method_data_box_1:
-                method_data_box_1[method] = {'temperature': [], 'vapor_pressure': []}
-            method_data_box_1[method]['temperature'].append(int(temperature))
-            method_data_box_1[method]['vapor_pressure'].append(df_ew[col].mean())
-
-    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
-    for idx, col in enumerate(df.columns):
-        if 'BOX_1' in col:
-            temperature = col.split('_')[0]
-            method = col.split('_')[1] + '_' + col.split('_')[2]
-            # Append temperature and density to the corresponding method in the dictionary
-            if method not in method_data_box_1:
-                method_data_box_1[method] = {'temperature': [], 'vapor_pressure': []}
-            method_data_box_1[method]['temperature'].append(int(temperature))
-            method_data_box_1[method]['vapor_pressure'].append(df[col].mean())
-
-    # Plotting sorted data
-    plt.plot(method_data_box_0["EWALD"]['temperature'], method_data_box_0["EWALD"]['vapor_pressure'], label=f'EWALD Liquid', linestyle='-', color="black", marker='o', fillstyle="full")
-    for method, data in method_data_box_0.items():
-        if method != "EWALD":
-            marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
-            plt.plot(data['temperature'], data['vapor_pressure'],  label=f'{method} Liquid', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
-
-    plt.xlabel('Temperature', fontsize=18)
-    plt.ylabel('Vapor Pressure', fontsize=18)
-    handles, labels = plt.gca().get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    lgd = plt.legend(by_label.values(), by_label.keys(),fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.title('VLE', fontsize=20)
-
-    # Save the plot as a PNG file
-    plt.savefig('vapor_pressure_box_0.png', bbox_extra_artists=(lgd,), bbox_inches='tight')
+    #axs[1].set_title('Box 0')
+    plot_data(df, df_ew, axs[1], "BOX_0")
 
     # Plot for Box 1
-    plt.figure(figsize=(10, 6))
+    #axs[0].set_title('Box 1')
+    plot_data(df, df_ew, axs[0], "BOX_1")
 
-    plt.plot(method_data_box_1["EWALD"]['temperature'], method_data_box_1["EWALD"]['vapor_pressure'], label=f'EWALD Vapor', linestyle='-', color="black", marker='o', fillstyle="full")
-    for method, data in method_data_box_1.items():
-        if method != "EWALD":
-            marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
-            plt.plot(data['temperature'], data['vapor_pressure'],  label=f'{method} Vapor', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
-
-    plt.xlabel('Temperature', fontsize=18)
-    plt.ylabel('Vapor Pressure', fontsize=18)
-    handles, labels = plt.gca().get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    lgd = plt.legend(by_label.values(), by_label.keys(),fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.title('VLE', fontsize=20)
-
-
-    plt.xlabel('Temperature', fontsize=18)
-    plt.ylabel('Vapor Pressure', fontsize=18)
-    handles, labels = plt.gca().get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    lgd = plt.legend(by_label.values(), by_label.keys(),fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.title('VLE', fontsize=20)
-
+    plt.tight_layout()
     # Save the plot as a PNG file
-    plt.savefig('vapor_pressure_box_1.png', bbox_extra_artists=(lgd,), bbox_inches='tight')
-
+    plt.savefig('vp_deviation.png', bbox_inches='tight')
     """
 }
 
@@ -4733,6 +4902,7 @@ workflow build_GEMC_system_wolf_inside_vle {
     Extract_Vapor_Pressure_GOMC_GEMC_Production(GOMC_GEMC_Equilibration_Production.out.record)
     Extract_Vapor_Pressure_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production_VP
     Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out,ewald_vapor_pressure_data)
+    Plot_GOMC_GEMC_Production_VLE_VP_Deviation(Collate_GOMC_GEMC_Production_VP.out,ewald_vapor_pressure_data)
     //Plot_GOMC_GEMC_Production_VLE_VP(Collate_GOMC_GEMC_Production_VP.out)
     //Plot_GOMC_GEMC_Production_VLE_Per_Density_VP(Collate_GOMC_GEMC_Production_VP.out)
 
