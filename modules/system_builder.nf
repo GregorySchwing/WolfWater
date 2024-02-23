@@ -3817,62 +3817,108 @@ process Plot_GOMC_GEMC_Production_VLE {
     df = pd.read_csv("$data_csv", sep='\t')
     df_ew = pd.read_csv("$ewald_data_csv", sep='\t')
 
+    import hashlib
+    def generate_color(method):
+        # Generate a unique color based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
+        # Take the first six characters of the hexadecimal digest to represent the color
+        color = '#' + hex_dig[:6]
+        return color
+
+    def generate_marker(method):
+        # Generate a unique marker based on the method name
+        markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 's']
+        # Use the ASCII value of the first character of the method name to select the marker
+        marker_index = ord(method[0]) % len(markers)
+        return markers[marker_index]
+
+    def generate_linestyle(method):
+        # Generate a unique linestyle based on the method name
+        linestyles = ['-', '--', '-.', ':']
+        # Use the ASCII value of the last character of the method name to select the linestyle
+        linestyle_index = ord(method[-1]) % len(linestyles)
+        return linestyles[linestyle_index]
+
+    def plot_data(df, df_ew, ax, box_name):
+        method_data = {}
+        # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern
+        for idx, col in enumerate(df.columns):
+            temperature = col.split('_')[0]
+            method = '_'.join(col.split('_')[1:-2])
+            if box_name in col:
+                # Append temperature and density to the corresponding method in the dictionary
+                if method not in method_data:
+                    method_data[method] = {'temperature': [], 'density': []}
+                method_data[method]['temperature'].append(int(temperature))
+                method_data[method]['density'].append(df[col].mean())
+
+        for idx, col in enumerate(df_ew.columns):
+            temperature = col.split('_')[0]
+            method = "EWALD"
+            if box_name in col:
+                # Append temperature and density to the corresponding method in the dictionary
+                if method not in method_data:
+                    method_data[method] = {'temperature': [], 'density': []}
+                method_data[method]['temperature'].append(int(temperature))
+                method_data[method]['density'].append(df_ew[col].mean())
+
+
+        # Sort temperature and density lists for each method by density
+        for method, data in method_data.items():
+            temp_density = list(zip(data['temperature'], data['density']))
+            temp_density.sort(key=lambda x: x[1])  # Sort by density
+            method_data[method]['temperature'], method_data[method]['density'] = zip(*temp_density)
+
+        ax.plot(method_data["EWALD"]['density'], method_data["EWALD"]['temperature'], label=f'EWALD', linestyle='-', color="black", marker='o', fillstyle="full")
+        for method, data in method_data.items():
+            if method != "EWALD":
+                #marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
+                #ax.plot(data['density'], data['temperature'], label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+                marker = generate_marker(method)
+                color = generate_color(method)
+                linestyle = generate_linestyle(method)
+                ax.plot(data['density'], data['temperature'], label=f'{method}', linestyle=linestyle, color=color, marker=marker)
+
+        ax.set_xlabel('Density', fontsize=18)
+        ax.set_ylabel('Temperature', fontsize=18)
+
+        if box_name == "BOX_1":
+            ax.set_xscale('log')
+            ax.set_xticks([0.001, 0.01, 0.1, 1, 10, 100])
+            ax.set_xticklabels(['\$10^{-3}\$', '\$10^{-2}\$', '\$10^{-1}\$', '\$10^{0}\$', '\$10^{1}\$', '\$10^{2}\$'])
+
+        if box_name == "BOX_0":
+            ax.set_xticks([400, 600, 800, 1000, 1200])
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            ax.legend(by_label.values(), by_label.keys(), fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+        
+
     # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
     method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
         df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
-        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h','s',],
-        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':','-'],  # Different line styles        
+        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 's',],
+        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':', '-'],  # Different line styles
         ['full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full'],  # Alternating fill pattern
         ['red', 'red', 'blue', 'blue', 'green', 'yellow', 'orange', 'green', 'green', 'grey', 'purple'],  # Alternating colors
     )}
-    method_data = {}
+
+    # Create a figure with two subplots
+    fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+
     # Plot for Box 0
-    plt.figure(figsize=(10, 6))
+    #axs[1].set_title('Box 0')
+    plot_data(df, df_ew, axs[1], "BOX_0")
 
-    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
-    for idx, col in enumerate(df.columns):
-        temperature = col.split('_')[0]
-        method = '_'.join(col.split('_')[1:-2])
-        # Append temperature and density to the corresponding method in the dictionary
-        if method not in method_data:
-            method_data[method] = {'temperature': [], 'density': []}
-        method_data[method]['temperature'].append(int(temperature))
-        method_data[method]['density'].append(df[col].mean())
-    # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
-    for idx, col in enumerate(df_ew.columns):
-        temperature = col.split('_')[0]
-        method = "EWALD"
-        if method not in method_data:
-            method_data[method] = {'temperature': [], 'density': []}
-        method_data[method]['temperature'].append(int(temperature))
-        method_data[method]['density'].append(df_ew[col][0])
+    # Plot for Box 1
+    #axs[0].set_title('Box 1')
+    plot_data(df, df_ew, axs[0], "BOX_1")
 
-    # Sort temperature and density lists for each method by density
-    for method, data in method_data.items():
-        temp_density = list(zip(data['temperature'], data['density']))
-        temp_density.sort(key=lambda x: x[1])  # Sort by density
-        method_data[method]['temperature'], method_data[method]['density'] = zip(*temp_density)
-
-    # Plotting sorted data
-    plt.plot(method_data["EWALD"]['density'], method_data["EWALD"]['temperature'], label=f'EWALD', linestyle='-', color="black", marker='o', fillstyle="full")
-    for method, data in method_data.items():
-        if method != "EWALD":
-            marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
-            plt.plot(data['density'], data['temperature'], label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
-
-
-    plt.xlabel('Density', fontsize=18)
-    plt.ylabel('Temperature', fontsize=18)
-    handles, labels = plt.gca().get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    lgd = plt.legend(by_label.values(), by_label.keys(),fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.title('VLE', fontsize=20)
-
+    plt.tight_layout()
     # Save the plot as a PNG file
-    plt.savefig('vle.png', bbox_extra_artists=(lgd,), bbox_inches='tight')
-
-    # Display the plot
-    plt.show()
+    plt.savefig('vle.png', bbox_inches='tight')
     """
 }
 
