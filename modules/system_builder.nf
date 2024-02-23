@@ -270,7 +270,7 @@ process build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve {
     path(statepoint1, stageAs: "statepoint1.json"), path(statepoint2, stageAs: "statepoint2.json"), \
     path(xsc1, stageAs: "xsc1.xsc"), path(xsc2, stageAs: "xsc2.xsc"),\
     path(coor1, stageAs: "coor1.coor"), path(coor2, stageAs: "coor2.coor"),\
-    path(path_to_xml), val(METHOD)
+    path(path_to_xml), path(convergence_obj), val(METHOD)
 
     output:
     tuple val(temp_K), val(METHOD), path("system_liq.pdb"), path("system_liq.psf"), path("system_vap.pdb"), path("system_vap.psf"), path("system.inp"), \
@@ -302,6 +302,28 @@ process build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve {
     loaded_point2 = load_point_from_json("$statepoint2")
     print("Loaded point2")
     print(loaded_point2)
+
+    # Convergence data
+    from typing import Dict, Union
+    from pydantic import BaseModel, Field
+    import json
+
+    class InnerModel(BaseModel):
+        ConvergedRCut: float
+        ConvergedAlpha: float
+        ConvergedFAlpha: float
+        ConvergedDFDAlpha: float
+
+    class FooBarModel(BaseModel):
+        models: Dict[str, Dict[int, InnerModel]]  # Adjusted for the nested dictionary
+
+    # Function to load Pydantic objects from JSON file
+    def load_point_from_json(file_path: str) -> FooBarModel:
+        with open(file_path, 'r') as file:
+            json_data = file.read()
+            return FooBarModel.model_validate_json(json_data)
+    
+    convergence_obj = load_point_from_json("${convergence_obj}")
 
     # GOMC Example for the NVT Ensemble using MoSDeF [1, 2, 5-10, 13-17]
 
@@ -1303,16 +1325,16 @@ process build_two_box_system_calibrate {
         NUM_POINTS = 50.0
         NUM_ALPHA_POINTS = 30.0
         NUM_RCUT_POINTS = 10.0
-    percentage = 1.0
+    percentage = 0.95
     ALPHA_START = 0.0
     ALPHA_END = 0.3
     ALPHA_DELTA = (ALPHA_END-ALPHA_START)/(NUM_ALPHA_POINTS-1)
     RCC_START = 10.0
-    RCC_END_BOX_0 = (float(liquid_box_0_length_Ang)/2.0)*percentage
+    RCC_END_BOX_0 = (float(liquid_box_length_Ang)/2.0)*percentage
     RCC_DELTA_BOX_0 = (RCC_END_BOX_0-RCC_START)/(NUM_RCUT_POINTS-1)
-    RCC_END_BOX_1 = (float(liquid_box_1_length_Ang)/2.0)*percentage
+    RCC_END_BOX_1 = (float(vapor_box_length_Ang)/2.0)*percentage
     RCC_DELTA_BOX_1 = (RCC_END_BOX_1-RCC_START)/(NUM_RCUT_POINTS-1)
-    file1 = open("calibration.conf", "a")
+    file1 = open("in_GEMC_NVT.conf", "a")
     defAlphaLine = "{box}\\t{val}\\t{file}\\n".format(box="WolfCalibrationFreq", val="True",file="1000")
     file1.writelines(defAlphaLine)
     defAlphaLine = "{title}\\t{box}\\t{start}\\t{end}\\t{delta}\\n".format(title="WolfAlphaRange", box="0",start=ALPHA_START,\
@@ -2314,6 +2336,27 @@ process plot_grids_two_box {
         #for box_value in box_values:
         #    model_dict[model_name][box_value] = result_dict
         model_dict[model_name][box]=result_dict
+
+        if model_name+"_uc" not in model_dict:
+            model_dict[model_name+"_uc"] = {}
+        result_dict_uc = {
+            'ConvergedRCut': 14,
+            'ConvergedAlpha': 0.12,  # Assuming column names are α
+            'ConvergedFAlpha': 0,
+            'ConvergedDFDAlpha': 0
+        }
+        model_dict[model_name+"_uc"][box]=result_dict_uc
+
+        if model_name+"_default" not in model_dict:
+            model_dict[model_name+"_default"] = {}
+        result_dict_default = {
+            'ConvergedRCut': 14,
+            'ConvergedAlpha': 0.145,  # Assuming column names are α
+            'ConvergedFAlpha': 0,
+            'ConvergedDFDAlpha': 0
+        }
+        model_dict[model_name+"_default"][box]=result_dict_default
+
 
         # Plotting one line per row in the subplot
         #df.plot(ax=axes[i], marker='o', linestyle='-', legend=False)
@@ -3618,7 +3661,7 @@ process Plot_GOMC_GEMC_Production {
     for idx, col in enumerate(df.columns):
         if 'BOX_0' in col:
             temperature = col.split('_')[0]
-            method = col.split('_')[1] + '_' + col.split('_')[2]
+            method = col.split('_')[1] + '_' + col.split('_')[2]+ '_' + col.split('_')[3]
             marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'blue'))  # Default values
             plt.plot(df.index, df[col], label=f'{col}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
 
@@ -3645,7 +3688,7 @@ process Plot_GOMC_GEMC_Production {
     for idx, col in enumerate(df.columns):
         if 'BOX_1' in col:
             temperature = col.split('_')[0]
-            method = col.split('_')[1] + '_' + col.split('_')[2]
+            method = col.split('_')[1] + '_' + col.split('_')[2]+ '_' + col.split('_')[3]
             marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'blue'))  # Default values
             plt.plot(df.index, df[col], label=f'{col}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
 
@@ -3789,7 +3832,7 @@ process Plot_GOMC_GEMC_Production_VLE {
     # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
     for idx, col in enumerate(df.columns):
         temperature = col.split('_')[0]
-        method = col.split('_')[1] + '_' + col.split('_')[2]
+        method = col.split('_')[1] + '_' + col.split('_')[2]+ '_' + col.split('_')[3]
         # Append temperature and density to the corresponding method in the dictionary
         if method not in method_data:
             method_data[method] = {'temperature': [], 'density': []}
@@ -3871,7 +3914,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
     # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
     for idx, col in enumerate(df.columns):
         temperature = col.split('_')[0]
-        method = col.split('_')[1] + '_' + col.split('_')[2]
+        method = col.split('_')[1] + '_' + col.split('_')[2]+ '_' + col.split('_')[3]
         # Append temperature and density to the corresponding method in the dictionary
         if method not in method_data:
             method_data[method] = {'temperature': [], 'density': []}
@@ -3922,7 +3965,9 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
                 ew_dens = data['density'][i]
         # Plotting bar chart for each method
         #axs[i].bar(methods, densities, color='blue')
-        axs[i].scatter(methods, densities, c=colors[:len(methods)])
+        #axs[i].scatter(methods, densities, c=colors[:len(methods)])
+        axs[i].scatter(methods, densities)
+
         axs[i].axhline(y=ew_dens, color="black", linestyle='--', linewidth=2)
         axs[i].tick_params(labelbottom=False)
     # Save the plot as a PNG file
@@ -3990,9 +4035,10 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density_Line {
         #method_dataframes[method][f'{temperature}_{box}'] = df[col]
 
         # Add density data to the corresponding DataFrame
-        N = len(df[col])
-        reindexed_column = pd.concat([pd.Series([np.nan] * N), df[col]]).reset_index(drop=True)
-        method_dataframes[method][f'{temperature}_{box}'] = reindexed_column
+        #N = len(df[col])
+        #reindexed_column = pd.concat([pd.Series([np.nan] * N), df[col]]).reset_index(drop=True)
+        #method_dataframes[method][f'{temperature}_{box}'] = reindexed_column
+        method_dataframes[method][f'{temperature}_{box}'] = df[col]
 
     # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
     for idx, col in enumerate(df_ew.columns):
@@ -4429,7 +4475,7 @@ workflow build_GEMC_system_wolf {
     ewald_vapor_pressure_data
     ewald_vol_data
     main:
-    //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
+    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
     methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
     combinedChannel=convergenceChannel.combine(methods)
     build_two_box_system_already_calibrated(combinedChannel)
@@ -4465,7 +4511,11 @@ workflow build_GEMC_system_wolf_inside_vle {
     ewald_vapor_pressure_data
     ewald_vol_data
     main:
-    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
+    //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
+    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP",\
+    "RAHBARI_DSF_uc","RAHBARI_DSP_uc","WAIBEL2018_DSF_uc","WAIBEL2018_DSP_uc","WAIBEL2019_DSF_uc","WAIBEL2019_DSP_uc",\
+    "RAHBARI_DSF_default","RAHBARI_DSP_default","WAIBEL2018_DSF_default","WAIBEL2018_DSP_default","WAIBEL2019_DSF_default","WAIBEL2019_DSP_default")
+
     //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
     combinedChannel=convergenceChannel.combine(methods)
     build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve(combinedChannel)
