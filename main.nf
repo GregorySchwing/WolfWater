@@ -84,7 +84,7 @@ log.info """\
 
         // Create a channel with the CSV file
         csv_channel = channel.fromPath(input_csv)
-        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 14,quote:'"').map { 
+        solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 2,quote:'"').map { 
             row -> [row.temp_K, row.P_bar, row.No_mol, row.Rho_kg_per_m_cubed, row.L_m_if_cubed, row.RcutCoulomb]
         }
         //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
@@ -114,11 +114,7 @@ log.info """\
             xscPaths[0], xscPaths[1], coorPaths[0], coorPaths[1]]
         }
         gemc_system_input = convergenceChannelFlattened.combine(solvent_xml_channel)   
-        build_GEMC_system(gemc_system_input)
-        
-        build_GEMC_system_wolf_inside_vle(gemc_system_input,build_GEMC_system.out.ewald_density_data,build_GEMC_system.out.ewald_vapor_pressure_data,build_GEMC_system.out.ewald_vol_data)
-        return
-        
+        build_GEMC_system(gemc_system_input)       
         tempAndDensity = convergenceChannel.map { tuple ->
             def temperature = tuple[0]
             def densities = tuple[1]
@@ -128,7 +124,10 @@ log.info """\
         }
         gemc_calibration_input = tempAndDensity.join(build_GEMC_system.out.restart_files).combine(solvent_xml_channel)
         build_GEMC_system_Calibrate(gemc_calibration_input)
-        gemc_wolf_production_input = tempAndDensity.join(build_GEMC_system.out.restart_files).join(build_GEMC_system_Calibrate.out.convergence).combine(solvent_xml_channel)
+        gemc_wolf_production_input = gemc_system_input.join(build_GEMC_system_Calibrate.out.convergence)
+        build_GEMC_system_wolf_inside_vle(gemc_wolf_production_input,build_GEMC_system.out.ewald_density_data,build_GEMC_system.out.ewald_vapor_pressure_data,build_GEMC_system.out.ewald_vol_data)
+        return
+        return
         build_GEMC_system_wolf(gemc_wolf_production_input,build_GEMC_system.out.ewald_density_data,build_GEMC_system.out.ewald_vapor_pressure_data,build_GEMC_system.out.ewald_vol_data)
         return
 
