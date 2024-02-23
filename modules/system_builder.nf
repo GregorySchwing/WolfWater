@@ -489,7 +489,11 @@ process build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve {
     file1 = open("in_GEMC_NVT_eq.conf", "a")
     defAlphaLine = "{box}\\t{val}\\n".format(box="Wolf", val="True")
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfPotential", val=kind_pot[1])
+    defAlphaLine = "{box}\\t{val}\\n".format(box="DSF", val=kind_pot[1]=="DSF")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="IntraDSF", val="WAIBEL" in kind_pot[0])
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="SimpleSelf", val=kind_pot[0]=="WAIBEL2018")
     file1.writelines(defAlphaLine)
     defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=0.12)
     file1.writelines(defAlphaLine)
@@ -549,7 +553,11 @@ process build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve {
     file1 = open("in_GEMC_NVT.conf", "a")
     defAlphaLine = "{box}\\t{val}\\n".format(box="Wolf", val="True")
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{box}\\t{val}\\n".format(box="WolfPotential", val=kind_pot[1])
+    defAlphaLine = "{box}\\t{val}\\n".format(box="DSF", val=kind_pot[1]=="DSF")
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="IntraDSF", val="WAIBEL" in kind_pot[0])
+    file1.writelines(defAlphaLine)
+    defAlphaLine = "{box}\\t{val}\\n".format(box="SimpleSelf", val=kind_pot[0]=="WAIBEL2018")
     file1.writelines(defAlphaLine)
     defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=0.12)
     file1.writelines(defAlphaLine)
@@ -4457,8 +4465,8 @@ workflow build_GEMC_system_wolf_inside_vle {
     ewald_vapor_pressure_data
     ewald_vol_data
     main:
-    //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
-    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
+    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP" )
+    //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
     combinedChannel=convergenceChannel.combine(methods)
     build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve(combinedChannel)
     GOMC_GEMC_Production_Input_Channel = build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve.out.system
