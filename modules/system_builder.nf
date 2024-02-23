@@ -3661,7 +3661,7 @@ process Plot_GOMC_GEMC_Production {
     for idx, col in enumerate(df.columns):
         if 'BOX_0' in col:
             temperature = col.split('_')[0]
-            method = col.split('_')[1] + '_' + col.split('_')[2]+ '_' + col.split('_')[3]
+            method = '_'.join(col.split('_')[1:-2])
             marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'blue'))  # Default values
             plt.plot(df.index, df[col], label=f'{col}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
 
@@ -3688,7 +3688,7 @@ process Plot_GOMC_GEMC_Production {
     for idx, col in enumerate(df.columns):
         if 'BOX_1' in col:
             temperature = col.split('_')[0]
-            method = col.split('_')[1] + '_' + col.split('_')[2]+ '_' + col.split('_')[3]
+            method = '_'.join(col.split('_')[1:-2])
             marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'blue'))  # Default values
             plt.plot(df.index, df[col], label=f'{col}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
 
@@ -3832,7 +3832,7 @@ process Plot_GOMC_GEMC_Production_VLE {
     # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
     for idx, col in enumerate(df.columns):
         temperature = col.split('_')[0]
-        method = col.split('_')[1] + '_' + col.split('_')[2]+ '_' + col.split('_')[3]
+        method = '_'.join(col.split('_')[1:-2])
         # Append temperature and density to the corresponding method in the dictionary
         if method not in method_data:
             method_data[method] = {'temperature': [], 'density': []}
@@ -3914,7 +3914,7 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density {
     # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern for Box 0
     for idx, col in enumerate(df.columns):
         temperature = col.split('_')[0]
-        method = col.split('_')[1] + '_' + col.split('_')[2]+ '_' + col.split('_')[3]
+        method = '_'.join(col.split('_')[1:-2])
         # Append temperature and density to the corresponding method in the dictionary
         if method not in method_data:
             method_data[method] = {'temperature': [], 'density': []}
@@ -4035,8 +4035,8 @@ process Plot_GOMC_GEMC_Production_VLE_Per_Density_Line {
         #method_dataframes[method][f'{temperature}_{box}'] = df[col]
 
         # Add density data to the corresponding DataFrame
-        #N = len(df[col])
-        #reindexed_column = pd.concat([pd.Series([np.nan] * N), df[col]]).reset_index(drop=True)
+        N = len(df[col])
+        reindexed_column = pd.concat([pd.Series([np.nan] * N), df[col]]).reset_index(drop=True)
         #method_dataframes[method][f'{temperature}_{box}'] = reindexed_column
         method_dataframes[method][f'{temperature}_{box}'] = df[col]
 
