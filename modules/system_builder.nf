@@ -3828,10 +3828,20 @@ process Plot_GOMC_GEMC_Production_VLE {
 
     def generate_marker(method):
         # Generate a unique marker based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
         markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 's']
         # Use the ASCII value of the first character of the method name to select the marker
-        marker_index = ord(method[0]) % len(markers)
+        marker_index = int(hex_dig, 16) % len(markers)
         return markers[marker_index]
+
+    def generate_fillstyle(method):
+        # Generate a unique fill style based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
+        fillstyles = ['full', 'none']
+        fill_index = int(hex_dig, 16) % len(fillstyles)
+        return fillstyles[fill_index]
 
     def generate_linestyle(method):
         # Generate a unique linestyle based on the method name
@@ -3879,7 +3889,8 @@ process Plot_GOMC_GEMC_Production_VLE {
                 marker = generate_marker(method)
                 color = generate_color(method)
                 linestyle = generate_linestyle(method)
-                ax.plot(data['density'], data['temperature'], label=f'{method}', linestyle=linestyle, color=color, marker=marker)
+                fillstyle = generate_fillstyle(method)
+                ax.plot(data['density'], data['temperature'], label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
 
         ax.set_xlabel('Density', fontsize=18)
         ax.set_ylabel('Temperature', fontsize=18)
@@ -3919,6 +3930,144 @@ process Plot_GOMC_GEMC_Production_VLE {
     plt.tight_layout()
     # Save the plot as a PNG file
     plt.savefig('vle.png', bbox_inches='tight')
+    """
+}
+
+
+process Plot_GOMC_GEMC_Production_VLE_Deviation { 
+    cache 'lenient'
+    fair true
+    container "${params.container__mosdef_gomc}"
+    publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
+    cpus 1
+    debug false
+    input: 
+    path(data_csv)
+    path(ewald_data_csv, stageAs: "ewald_merged.csv")
+    output: path ("vle_deviation.png")
+
+    script:
+    """
+    #!/usr/bin/env python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    # Load the CSV file into a pandas DataFrame
+    df = pd.read_csv("$data_csv", sep='\t')
+    df_ew = pd.read_csv("$ewald_data_csv", sep='\t')
+
+    import hashlib
+    def generate_color(method):
+        # Generate a unique color based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
+        # Take the first six characters of the hexadecimal digest to represent the color
+        color = '#' + hex_dig[:6]
+        return color
+
+    def generate_marker(method):
+        # Generate a unique marker based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
+        markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 's']
+        # Use the ASCII value of the first character of the method name to select the marker
+        marker_index = int(hex_dig, 16) % len(markers)
+        return markers[marker_index]
+
+    def generate_fillstyle(method):
+        # Generate a unique fill style based on the method name
+        hash_object = hashlib.sha256(method.encode())
+        hex_dig = hash_object.hexdigest()
+        fillstyles = ['full', 'none']
+        fill_index = int(hex_dig, 16) % len(fillstyles)
+        return fillstyles[fill_index]
+
+
+    def generate_linestyle(method):
+        # Generate a unique linestyle based on the method name
+        linestyles = ['-', '--', '-.', ':']
+        # Use the ASCII value of the last character of the method name to select the linestyle
+        linestyle_index = ord(method[-1]) % len(linestyles)
+        return linestyles[linestyle_index]
+
+    def plot_data(df, df_ew, ax, box_name):
+        method_data = {}
+        # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern
+        for idx, col in enumerate(df.columns):
+            temperature = col.split('_')[0]
+            method = '_'.join(col.split('_')[1:-2])
+            if box_name in col:
+                # Append temperature and density to the corresponding method in the dictionary
+                if method not in method_data:
+                    method_data[method] = {'temperature': [], 'density': []}
+                method_data[method]['temperature'].append(int(temperature))
+                method_data[method]['density'].append(df[col].mean())
+
+        for idx, col in enumerate(df_ew.columns):
+            temperature = col.split('_')[0]
+            method = "EWALD"
+            if box_name in col:
+                # Append temperature and density to the corresponding method in the dictionary
+                if method not in method_data:
+                    method_data[method] = {'temperature': [], 'density': []}
+                method_data[method]['temperature'].append(int(temperature))
+                method_data[method]['density'].append(df_ew[col].mean())
+
+
+        # Sort temperature and density lists for each method by density
+        for method, data in method_data.items():
+            temp_density = list(zip(data['temperature'], data['density']))
+            temp_density.sort(key=lambda x: x[1])  # Sort by density
+            method_data[method]['temperature'], method_data[method]['density'] = zip(*temp_density)
+
+        for method, data in method_data.items():
+            if method != "EWALD":
+                #marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
+                #ax.plot(data['density'], data['temperature'], label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+                marker = generate_marker(method)
+                color = generate_color(method)
+                linestyle = generate_linestyle(method)
+                fillstyle = generate_fillstyle(method)
+                # Calculate relative error
+                ewald_density = method_data["EWALD"]['density']
+                relative_error = [100*(density - ewald_density[idx]) / ewald_density[idx] for idx, density in enumerate(data['density'])]
+                ax.plot(data['temperature'], relative_error, label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
+
+        ax.set_xlabel('Temperature', fontsize=18)
+        ax.set_ylabel(r'\$100 \\times (\\rho_{\\text{Ewald}} - \\rho_{\\text{Wolf}})/\\rho_{\\text{Ewald}}\$', fontsize=18)
+        #ax.set_ylabel('Temperature', fontsize=18)
+
+        if box_name == "BOX_0":
+            #ax.set_xticks([400, 600, 800, 1000, 1200])
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            ax.legend(by_label.values(), by_label.keys(), fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
+        
+
+    # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
+    method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
+        df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
+        ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 's',],
+        ['-', '--', '-.', ':', '--', '-.', ':', '--', '-.', ':', '-'],  # Different line styles
+        ['full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full', 'none', 'full'],  # Alternating fill pattern
+        ['red', 'red', 'blue', 'blue', 'green', 'yellow', 'orange', 'green', 'green', 'grey', 'purple'],  # Alternating colors
+    )}
+
+    # Create a figure with two subplots
+    fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+
+    # Plot for Box 0
+    axs[1].set_title('Liquid')
+    plot_data(df, df_ew, axs[1], "BOX_0")
+
+    # Plot for Box 1
+    axs[0].set_title('Vapor')
+    plot_data(df, df_ew, axs[0], "BOX_1")
+
+    plt.tight_layout()
+    # Save the plot as a PNG file
+    plt.savefig('vle_deviation.png', bbox_inches='tight')
     """
 }
 
@@ -4571,6 +4720,8 @@ workflow build_GEMC_system_wolf_inside_vle {
     Extract_Density_GOMC_GEMC_Production.out.analysis | collect | Collate_GOMC_GEMC_Production
     Plot_GOMC_GEMC_Production(Collate_GOMC_GEMC_Production.out)
     Plot_GOMC_GEMC_Production_VLE(Collate_GOMC_GEMC_Production.out,ewald_density_data)
+    Plot_GOMC_GEMC_Production_VLE_Deviation(Collate_GOMC_GEMC_Production.out,ewald_density_data)
+
     Plot_GOMC_GEMC_Production_VLE_Per_Density(Collate_GOMC_GEMC_Production.out,ewald_density_data)
     Plot_GOMC_GEMC_Production_VLE_Per_Density_Line(Collate_GOMC_GEMC_Production.out,ewald_density_data)
 
