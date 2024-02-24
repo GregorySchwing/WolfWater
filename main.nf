@@ -87,11 +87,6 @@ log.info """\
         solventData = Channel.fromPath( params.database_path ).splitCsv(header: true,limit: 14,quote:'"').map { 
             row -> [row.temp_K, row.P_bar, row.No_mol, row.Rho_kg_per_m_cubed, row.L_m_if_cubed, row.RcutCoulomb]
         }
-        //vapor_systems = build_solvents(vapor_points.combine(path_to_xml))
-        //path_to_database = Channel.fromPath( params.database_path )
-        //train_model(csv_channel)
-        //model_density_tuple = train_model.out.model_scalers_tuple.combine(densities)
-        //predicted_points = predict_model(model_density_tuple)
         solvent_xml = file(params.path_to_xml)
         min_jinja_template = file(params.path_to_minimization_template)
         nvt_jinja_template = file(params.path_to_nvt_template)
