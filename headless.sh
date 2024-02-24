@@ -34,4 +34,5 @@ mkdir -p ${HOME}/singularity_cache
 export NXF_SINGULARITY_CACHEDIR=${HOME}/singularity_cache
 mkdir -p ${HOME}/xdr
 export XDG_RUNTIME_DIR=${HOME}/xdr
-nextflow run -profile slurm . --param_name nextflow.config -resume
+#nextflow run -profile slurm . --param_name nextflow.config -resume
+nextflow run -profile slurm . --param_name nextflow.config
