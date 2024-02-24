@@ -432,8 +432,10 @@ process build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve {
     Rcut_low_ang = 1.0 * u.angstrom
     LRC = True
     Exclude = "1-4"
-    RcutCoulomb_box_0=14
-    RcutCoulomb_box_1=14
+    #RcutCoulomb_box_0=14
+    #RcutCoulomb_box_1=14
+    RcutCoulomb_box_0=convergence_obj.models["${METHOD}"][0].ConvergedRCut
+    RcutCoulomb_box_1=convergence_obj.models["${METHOD}"][1].ConvergedRCut
 
     # Eq _NVT in GEMC (expert mode) MC move ratios
     DisFreqEM = 0.45
@@ -517,9 +519,9 @@ process build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve {
     file1.writelines(defAlphaLine)
     defAlphaLine = "{box}\\t{val}\\n".format(box="SimpleSelf", val=kind_pot[0]=="WAIBEL2018")
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=0.12)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=convergence_obj.models["${METHOD}"][0].ConvergedAlpha)
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="1", val=0.12)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="1", val=convergence_obj.models["${METHOD}"][1].ConvergedAlpha)
     file1.writelines(defAlphaLine)
 
     output_file_prefix="GOMC_GEMC_Production"
@@ -581,9 +583,9 @@ process build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve {
     file1.writelines(defAlphaLine)
     defAlphaLine = "{box}\\t{val}\\n".format(box="SimpleSelf", val=kind_pot[0]=="WAIBEL2018")
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=0.12)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="0", val=convergence_obj.models["${METHOD}"][0].ConvergedAlpha)
     file1.writelines(defAlphaLine)
-    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="1", val=0.12)
+    defAlphaLine = "{key}\\t{box}\\t{val}\\n".format(key="WolfAlpha",box="1", val=convergence_obj.models["${METHOD}"][1].ConvergedAlpha)
     file1.writelines(defAlphaLine)
     """
 }
