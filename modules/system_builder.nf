@@ -2129,7 +2129,7 @@ process plot_grids {
 
 
 process plot_grids_two_box {
-    //cache 'lenient'
+    cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/calibration/plots", mode: 'copy', overwrite: false
@@ -3261,7 +3261,7 @@ process GOMC_GEMC_Production {
 
 
 process GOMC_GEMC_Equilibration_Production {
-    cache 'lenient'
+    //cache 'lenient'
     fair true
     container "${params.container__gomc}"
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/methods/${METHOD}/production", mode: 'copy', overwrite: false
