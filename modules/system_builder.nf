@@ -258,7 +258,7 @@ process build_solvent_system {
 
 
 process build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve {
-    cache 'lenient'
+    //cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/wolf/methods/${METHOD}/input", mode: 'copy', overwrite: false
@@ -2129,7 +2129,7 @@ process plot_grids {
 
 
 process plot_grids_two_box {
-    cache 'lenient'
+    //cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/GEMC/temperature_${temp_K}_gemc/calibration/plots", mode: 'copy', overwrite: false
@@ -2281,7 +2281,14 @@ process plot_grids_two_box {
         abs_slopes_df = df_slopes.abs()
         abs_df.to_csv(f"abs_df_{model_name}_{box}.csv", header=True, sep=' ', index=True)
 
-        normalized_df = scale_dataframe(abs_df)
+        # Find the single largest and single smallest value in the entire DataFrame
+        min_value = abs_df.values.min()
+        max_value = abs_df.values.max()
+
+        # Scale the entire DataFrame between 0 and 1
+        normalized_df = (abs_df - min_value) / (max_value - min_value)
+        #normalized_df = scale_dataframe(abs_df)
+
         normalized_df.to_csv(f"normalized_df_{model_name}_{box}.csv", header=True, sep=' ', index=True)
 
         # Calculate the standard deviation of each row
@@ -2293,10 +2300,17 @@ process plot_grids_two_box {
         std_df.index = df.index
         std_df.to_csv(f"std_{model_name}_{box}.csv", header=True, sep=' ', index=True)
         
+        # Find the single largest and single smallest value in the entire DataFrame
+        min_value = std_df.values.min()
+        max_value = std_df.values.max()
+
+        # Scale the entire DataFrame between 0 and 1
+        normalized_std_df = (std_df - min_value) / (max_value - min_value)
+        
         
         # Convert the reshaped data into a DataFrame with original column names and index
         #normalized_std_df = scale_dataframe(std_df)
-        normalized_std_df = scale_dataframe(df_slopes)
+        #normalized_std_df = scale_dataframe(df_slopes)
 
         normalized_std_df.to_csv(f"norm_std_{model_name}_{box}.csv", header=True, sep=' ', index=True)
 
