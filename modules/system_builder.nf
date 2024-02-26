@@ -2317,7 +2317,7 @@ process plot_grids_two_box {
         normalized_df = normalized_df.multiply(rel_error_weight)
         normalized_std_df = normalized_std_df.multiply(std_weight)
         # Calculate Euclidean distance for each tuple across all columns
-        tuple_df = pd.concat([normalized_df, normalized_std_df]).groupby(level=0).apply(lambda x: np.sqrt(np.sum(x**2)))
+        tuple_df = pd.concat([normalized_df, normalized_std_df]).groupby(level=0).apply(lambda x: np.sum(x))
         
         print(abs_df.head())
         print(std_df.head())
