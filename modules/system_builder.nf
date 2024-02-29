@@ -3951,7 +3951,7 @@ process Plot_GOMC_GEMC_Production_VLE {
 
 
 process Plot_GOMC_GEMC_Production_VLE_Deviation { 
-    cache 'lenient'
+    //cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/plot_gemc/density", mode: 'copy', overwrite: false
@@ -3960,12 +3960,14 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
     input: 
     path(data_csv)
     path(ewald_data_csv, stageAs: "ewald_merged.csv")
-    output: path ("vle_deviation.png")
+    output: path ("vle*.png")
 
     script:
     """
     #!/usr/bin/env python
     import pandas as pd
+    import numpy as np
+
     import matplotlib.pyplot as plt
 
     # Load the CSV file into a pandas DataFrame
@@ -4006,8 +4008,11 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
         linestyle_index = ord(method[-1]) % len(linestyles)
         return linestyles[linestyle_index]
 
-    def plot_data(df, df_ew, ax, box_name):
+    def plot_data(df, df_ew, ax, ax_bar, box_name):
         method_data = {}
+        absolute_mean_errors = {}  # Dictionary to store absolute mean errors for each method
+        std_deviations = {} 
+        method_colors = {} 
         # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern
         for idx, col in enumerate(df.columns):
             temperature = col.split('_')[0]
@@ -4036,7 +4041,8 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
             temp_density.sort(key=lambda x: x[1])  # Sort by density
             method_data[method]['temperature'], method_data[method]['density'] = zip(*temp_density)
 
-        for method, data in method_data.items():
+        #for method, data in method_data.items():
+        for idx, (method, data) in enumerate(method_data.items()):
             if method != "EWALD":
                 #marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
                 #ax.plot(data['density'], data['temperature'], label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
@@ -4050,9 +4056,25 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
                 relative_error = [100*(density - ewald_density[idx]) / ewald_density[idx] for idx, density in enumerate(data['density'])]
                 ax.plot(data['temperature'], relative_error, label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
 
+                # Calculate absolute mean of relative error
+                absolute_mean_error = np.mean(np.abs(relative_error))
+                absolute_mean_errors[method] = absolute_mean_error
+
+                std_deviation = np.std(np.abs(relative_error))
+                std_deviations[method] = std_deviation
+
+                method_colors[method] = plt.cm.tab10(idx)
+
         ax.set_xlabel('Temperature', fontsize=18)
         ax.set_ylabel(r'\$100 \\times (\\rho_{\\text{Ewald}} - \\rho_{\\text{Wolf}})/\\rho_{\\text{Ewald}}\$', fontsize=18)
         #ax.set_ylabel('Temperature', fontsize=18)
+
+        # Plot absolute mean of relative errors
+        #ax_bar.bar(absolute_mean_errors.keys(), absolute_mean_errors.values(), label=f'Absolute Mean Relative Error - {box_name}', color='gray')
+        #ax_bar.bar(absolute_mean_errors.keys(), absolute_mean_errors.values(), yerr=std_deviations.values(), label=f'Absolute Mean Relative Error - {box_name}', color='gray', capsize=5)
+        ax_bar.bar(absolute_mean_errors.keys(), absolute_mean_errors.values(), yerr=std_deviations.values(), label=f'Absolute Mean Relative Error - {box_name}', color=list(method_colors.values()), capsize=5)
+        ax_bar.set_xlabel('Method', fontsize=18)
+        ax_bar.set_ylabel('Absolute Mean Relative Error', fontsize=18)
 
         if box_name == "BOX_0":
             #ax.set_xticks([400, 600, 800, 1000, 1200])
@@ -4060,7 +4082,6 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
             by_label = dict(zip(labels, handles))
             ax.legend(by_label.values(), by_label.keys(), fontsize=14, bbox_to_anchor=(1.05, 1), loc='upper left')
         
-
     # Create a dictionary to dynamically map each method to a specific marker, line pattern, fill pattern, and color
     method_properties = {method: (marker, linestyle, fillstyle, color) for method, marker, linestyle, fillstyle, color in zip(
         df.columns.str.split('_').str[1] + '_' + df.columns.str.split('_').str[2],
@@ -4071,19 +4092,32 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
     )}
 
     # Create a figure with two subplots
-    fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+    #fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+    fig_line = plt.figure(figsize=(15, 6))
+    axs_line = fig_line.subplots(1, 2)
+    fig_bar = plt.figure(figsize=(15, 6))
+    axs_bar = fig_bar.subplots(1, 2)
 
     # Plot for Box 0
-    axs[1].set_title('Liquid')
-    plot_data(df, df_ew, axs[1], "BOX_0")
+    axs_line[1].set_title('Liquid')
+    axs_bar[1].set_title('Liquid')
+
+    plot_data(df, df_ew, axs_line[1], axs_bar[1], "BOX_0")
 
     # Plot for Box 1
-    axs[0].set_title('Vapor')
-    plot_data(df, df_ew, axs[0], "BOX_1")
+    axs_line[0].set_title('Vapor')
+    axs_bar[0].set_title('Vapor')
+
+    plot_data(df, df_ew, axs_line[0], axs_bar[0], "BOX_1")
 
     plt.tight_layout()
-    # Save the plot as a PNG file
-    plt.savefig('vle_deviation.png', bbox_inches='tight')
+
+    # Save the line plot as a PNG file
+    fig_line.savefig('vle_deviation.png', bbox_inches='tight')
+
+    # Save the bar chart as a PNG file
+    fig_bar.savefig('vle_bar_plot.png', bbox_inches='tight')
+
     """
 }
 
