@@ -5007,10 +5007,10 @@ workflow build_GEMC_system_wolf_inside_vle {
     //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP",\
     //"RAHBARI_DSF_uc","RAHBARI_DSP_uc","WAIBEL2018_DSF_uc","WAIBEL2018_DSP_uc","WAIBEL2019_DSF_uc","WAIBEL2019_DSP_uc",\
     //"RAHBARI_DSF_default","RAHBARI_DSP_default","WAIBEL2018_DSF_default","WAIBEL2018_DSP_default","WAIBEL2019_DSF_default","WAIBEL2019_DSP_default")
-    //methods = Channel.of( "RAHBARI_DSF_uc","RAHBARI_DSP_uc","WAIBEL2018_DSF_uc","WAIBEL2018_DSP_uc","WAIBEL2019_DSF_uc","WAIBEL2019_DSP_uc",\
-    //"RAHBARI_DSF_default","RAHBARI_DSP_default","WAIBEL2018_DSF_default","WAIBEL2018_DSP_default","WAIBEL2019_DSF_default","WAIBEL2019_DSP_default")
+    methods = Channel.of( "RAHBARI_DSF_uc","RAHBARI_DSP_uc","WAIBEL2018_DSF_uc","WAIBEL2018_DSP_uc","WAIBEL2019_DSF_uc","WAIBEL2019_DSP_uc",\
+    "RAHBARI_DSF_default","RAHBARI_DSP_default","WAIBEL2018_DSF_default","WAIBEL2018_DSP_default","WAIBEL2019_DSF_default","WAIBEL2019_DSP_default")
 
-    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
+    //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
     combinedChannel=convergenceChannel.combine(methods)
     build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve(combinedChannel)
     GOMC_GEMC_Production_Input_Channel = build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve.out.system
