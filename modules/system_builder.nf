@@ -3960,7 +3960,7 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
     input: 
     path(data_csv)
     path(ewald_data_csv, stageAs: "ewald_merged.csv")
-    output: path ("vle*.png")
+    output: tuple path ("vle*.png"), path("*.csv")
 
     script:
     """
@@ -4038,7 +4038,9 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
         # Sort temperature and density lists for each method by density
         for method, data in method_data.items():
             temp_density = list(zip(data['temperature'], data['density']))
-            temp_density.sort(key=lambda x: x[1])  # Sort by density
+            #temp_density.sort(key=lambda x: x[1])  # Sort by density
+            temp_density.sort(key=lambda x: x[0])  # Sort by temperature
+
             method_data[method]['temperature'], method_data[method]['density'] = zip(*temp_density)
 
         #for method, data in method_data.items():
@@ -4064,6 +4066,22 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
                 std_deviations[method] = std_deviation
 
                 method_colors[method] = plt.cm.tab10(idx)
+
+        # Convert dictionary to DataFrame
+        df = pd.DataFrame(absolute_mean_errors)
+        # Define the CSV file name
+        csv_file = box_name + "_abs_mean_errors.csv"
+        # Save DataFrame to CSV
+        df.to_csv(csv_file, index=False)
+        print(f"CSV file '{csv_file}' has been created.")
+
+        # Convert dictionary to DataFrame
+        df2 = pd.DataFrame(std_deviations)
+        # Define the CSV file name
+        csv_file2 = box_name + "_std.csv"
+        # Save DataFrame to CSV
+        df2.to_csv(csv_file2, index=False)
+        print(f"CSV file '{csv_file2}' has been created.")
 
         ax.set_xlabel('Temperature', fontsize=18)
         ax.set_ylabel(r'\$100 \\times (\\rho_{\\text{Ewald}} - \\rho_{\\text{Wolf}})/\\rho_{\\text{Ewald}}\$', fontsize=18)
@@ -4101,12 +4119,14 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
     # Plot for Box 0
     axs_line[1].set_title('Liquid')
     axs_bar[1].set_title('Liquid')
+    axs_bar[1].tick_params(axis='x', rotation=90)  # Adjust rotation angle as needed
 
     plot_data(df, df_ew, axs_line[1], axs_bar[1], "BOX_0")
 
     # Plot for Box 1
     axs_line[0].set_title('Vapor')
     axs_bar[0].set_title('Vapor')
+    axs_bar[0].tick_params(axis='x', rotation=90)  # Adjust rotation angle as needed
 
     plot_data(df, df_ew, axs_line[0], axs_bar[0], "BOX_1")
 
@@ -4564,7 +4584,7 @@ process Plot_GOMC_GEMC_Production_VLE_VP {
 
 
 process Plot_GOMC_GEMC_Production_VLE_VP_Deviation { 
-    cache 'lenient'
+    //cache 'lenient'
     fair true
     container "${params.container__mosdef_gomc}"
     publishDir "${params.output_folder}/systems/plot_gemc/vapor_pressure", mode: 'copy', overwrite: false
@@ -4573,12 +4593,13 @@ process Plot_GOMC_GEMC_Production_VLE_VP_Deviation {
     input: 
     path(data_csv)
     path(ewald_data_csv, stageAs: "ewald_merged.csv")
-    output: path ("vp_deviation.png")
+    output: tuple path ("vp*.png"), path("*.csv")
 
     script:
     """
     #!/usr/bin/env python
     import pandas as pd
+    import numpy as np
     import matplotlib.pyplot as plt
 
     # Load the CSV file into a pandas DataFrame
@@ -4618,8 +4639,11 @@ process Plot_GOMC_GEMC_Production_VLE_VP_Deviation {
         linestyle_index = ord(method[-1]) % len(linestyles)
         return linestyles[linestyle_index]
 
-    def plot_data(df, df_ew, ax, box_name):
+    def plot_data(df, df_ew, ax, ax_bar, box_name):
         method_data = {}
+        absolute_mean_errors = {}  # Dictionary to store absolute mean errors for each method
+        std_deviations = {} 
+        method_colors = {} 
         # Plot each column as a line graph with the appropriate color, marker, line pattern, and fill pattern
         for idx, col in enumerate(df.columns):
             temperature = col.split('_')[0]
@@ -4645,11 +4669,14 @@ process Plot_GOMC_GEMC_Production_VLE_VP_Deviation {
         # Sort temperature and vp lists for each method by vp
         for method, data in method_data.items():
             temp_density = list(zip(data['temperature'], data['vp']))
-            temp_density.sort(key=lambda x: x[1])  # Sort by vp
+            #temp_density.sort(key=lambda x: x[1])  # Sort by vp
+            temp_density.sort(key=lambda x: x[0])  # Sort by density
+
             method_data[method]['temperature'], method_data[method]['vp'] = zip(*temp_density)
 
         #ax.plot(method_data["EWALD"]['temperature'], method_data["EWALD"]['vp'], label=f'EWALD', linestyle='-', color="black", marker='o', fillstyle="full")
-        for method, data in method_data.items():
+        for idx, (method, data) in enumerate(method_data.items()):
+
             if method != "EWALD":
                 #marker, linestyle, fillstyle, color = method_properties.get(method, ('o', '-', 'full', 'black'))
                 #ax.plot(data['vp'], data['temperature'], label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
@@ -4663,8 +4690,42 @@ process Plot_GOMC_GEMC_Production_VLE_VP_Deviation {
                 relative_error = [100*(vp - ewald_vp[idx]) / ewald_vp[idx] for idx, vp in enumerate(data['vp'])]
                 ax.plot(data['temperature'], relative_error, label=f'{method}', linestyle=linestyle, color=color, marker=marker, fillstyle=fillstyle)
 
+                # Calculate absolute mean of relative error
+                absolute_mean_error = np.mean(np.abs(relative_error))
+                absolute_mean_errors[method] = absolute_mean_error
+
+                std_deviation = np.std(np.abs(relative_error))
+                std_deviations[method] = std_deviation
+
+                method_colors[method] = plt.cm.tab10(idx)
+
+        # Convert dictionary to DataFrame
+        df = pd.DataFrame(absolute_mean_errors)
+        # Define the CSV file name
+        csv_file = box_name + "_abs_mean_errors.csv"
+        # Save DataFrame to CSV
+        df.to_csv(csv_file, index=False)
+        print(f"CSV file '{csv_file}' has been created.")
+
+        # Convert dictionary to DataFrame
+        df2 = pd.DataFrame(std_deviations)
+        # Define the CSV file name
+        csv_file2 = box_name + "_std.csv"
+        # Save DataFrame to CSV
+        df2.to_csv(csv_file2, index=False)
+        print(f"CSV file '{csv_file2}' has been created.")
+
         ax.set_ylabel(r'\$100 \\times (p_{\\text{Ewald}} - p_{\\text{Wolf}})/p_{\\text{Ewald}}\$', fontsize=18)
         ax.set_xlabel('Temperature', fontsize=18)
+
+        num_entries = len(absolute_mean_errors)
+        x = np.linspace(0, 0.2*num_entries, num_entries)
+        ax_bar.errorbar(x, list(absolute_mean_errors.values()), yerr=list(std_deviations.values()), fmt='o', label=f'Absolute Mean Relative Error - {box_name}')
+        ax_bar.set_xticks(x)
+        ax_bar.set_xticklabels(absolute_mean_errors.keys())
+        #ax_bar.bar(absolute_mean_errors.keys(), absolute_mean_errors.values(), yerr=std_deviations.values(), label=f'Absolute Mean Relative Error - {box_name}', color=list(method_colors.values()), capsize=5)
+        #ax_bar.set_xlabel('Method', fontsize=18)
+        #ax_bar.set_ylabel('Absolute Mean Relative Error', fontsize=18)
 
         #if box_name == "BOX_1":
         #ax.set_xscale('log')
@@ -4688,19 +4749,36 @@ process Plot_GOMC_GEMC_Production_VLE_VP_Deviation {
     )}
 
     # Create a figure with two subplots
-    fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+    #fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+    fig_line = plt.figure(figsize=(15, 6))
+    axs_line = fig_line.subplots(1, 2)
+    fig_bar = plt.figure(figsize=(15, 6))
+    axs_bar = fig_bar.subplots(1, 2)
 
     # Plot for Box 0
-    #axs[1].set_title('Box 0')
-    plot_data(df, df_ew, axs[1], "BOX_0")
+    axs_line[1].set_title('Liquid')
+    axs_bar[1].set_title('Liquid')
+    axs_bar[1].tick_params(axis='x', rotation=90)  # Adjust rotation angle as needed
+
+
+    plot_data(df, df_ew, axs_line[1], axs_bar[1], "BOX_0")
 
     # Plot for Box 1
-    #axs[0].set_title('Box 1')
-    plot_data(df, df_ew, axs[0], "BOX_1")
+    axs_line[0].set_title('Vapor')
+    axs_bar[0].set_title('Vapor')
+    axs_bar[0].tick_params(axis='x', rotation=90)  # Adjust rotation angle as needed
+
+    plot_data(df, df_ew, axs_line[0], axs_bar[0], "BOX_1")
 
     plt.tight_layout()
-    # Save the plot as a PNG file
-    plt.savefig('vp_deviation.png', bbox_inches='tight')
+
+    # Save the line plot as a PNG file
+    fig_line.savefig('vp_deviation.png', bbox_inches='tight')
+
+    # Save the bar chart as a PNG file
+    fig_bar.savefig('vp_bar_plot.png', bbox_inches='tight')
+
+    
     """
 }
 
@@ -4929,10 +5007,10 @@ workflow build_GEMC_system_wolf_inside_vle {
     //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP","WAIBEL2018_DSF","WAIBEL2018_DSP","WAIBEL2019_DSF","WAIBEL2019_DSP",\
     //"RAHBARI_DSF_uc","RAHBARI_DSP_uc","WAIBEL2018_DSF_uc","WAIBEL2018_DSP_uc","WAIBEL2019_DSF_uc","WAIBEL2019_DSP_uc",\
     //"RAHBARI_DSF_default","RAHBARI_DSP_default","WAIBEL2018_DSF_default","WAIBEL2018_DSP_default","WAIBEL2019_DSF_default","WAIBEL2019_DSP_default")
-    methods = Channel.of( "RAHBARI_DSF_uc","RAHBARI_DSP_uc","WAIBEL2018_DSF_uc","WAIBEL2018_DSP_uc","WAIBEL2019_DSF_uc","WAIBEL2019_DSP_uc",\
-    "RAHBARI_DSF_default","RAHBARI_DSP_default","WAIBEL2018_DSF_default","WAIBEL2018_DSP_default","WAIBEL2019_DSF_default","WAIBEL2019_DSP_default")
+    //methods = Channel.of( "RAHBARI_DSF_uc","RAHBARI_DSP_uc","WAIBEL2018_DSF_uc","WAIBEL2018_DSP_uc","WAIBEL2019_DSF_uc","WAIBEL2019_DSP_uc",\
+    //"RAHBARI_DSF_default","RAHBARI_DSP_default","WAIBEL2018_DSF_default","WAIBEL2018_DSP_default","WAIBEL2019_DSF_default","WAIBEL2019_DSP_default")
 
-    //methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
+    methods = Channel.of( "RAHBARI_DSF","RAHBARI_DSP")
     combinedChannel=convergenceChannel.combine(methods)
     build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve(combinedChannel)
     GOMC_GEMC_Production_Input_Channel = build_two_box_system_wolf_fixed_rcut_alpha_inside_VLE_curve.out.system
