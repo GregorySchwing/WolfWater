@@ -4068,7 +4068,7 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
                 method_colors[method] = plt.cm.tab10(idx)
 
         # Convert dictionary to DataFrame
-        df = pd.DataFrame(absolute_mean_errors)
+        df = pd.DataFrame(absolute_mean_errors, index=[0])
         # Define the CSV file name
         csv_file = box_name + "_abs_mean_errors.csv"
         # Save DataFrame to CSV
@@ -4076,7 +4076,7 @@ process Plot_GOMC_GEMC_Production_VLE_Deviation {
         print(f"CSV file '{csv_file}' has been created.")
 
         # Convert dictionary to DataFrame
-        df2 = pd.DataFrame(std_deviations)
+        df2 = pd.DataFrame(std_deviations, index=[0])
         # Define the CSV file name
         csv_file2 = box_name + "_std.csv"
         # Save DataFrame to CSV
@@ -4700,7 +4700,7 @@ process Plot_GOMC_GEMC_Production_VLE_VP_Deviation {
                 method_colors[method] = plt.cm.tab10(idx)
 
         # Convert dictionary to DataFrame
-        df = pd.DataFrame(absolute_mean_errors)
+        df = pd.DataFrame(absolute_mean_errors, index=[0])
         # Define the CSV file name
         csv_file = box_name + "_abs_mean_errors.csv"
         # Save DataFrame to CSV
@@ -4708,7 +4708,7 @@ process Plot_GOMC_GEMC_Production_VLE_VP_Deviation {
         print(f"CSV file '{csv_file}' has been created.")
 
         # Convert dictionary to DataFrame
-        df2 = pd.DataFrame(std_deviations)
+        df2 = pd.DataFrame(std_deviations, index=[0])
         # Define the CSV file name
         csv_file2 = box_name + "_std.csv"
         # Save DataFrame to CSV
