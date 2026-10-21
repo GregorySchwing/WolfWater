@@ -1,0 +1,32 @@
+{
+  "schema": "sdlc-metrics/1",
+  "generated_at": "2026-10-21T08:52:18Z",
+  "window_days": 30,
+  "sharing": "on",
+  "protocol_version": "0.2.0 f530a66",
+  "counts": {
+    "claims": 0,
+    "pull_requests_opened": 2,
+    "merged": 1,
+    "closed_unmerged": 0,
+    "reviews": 0,
+    "changes_requested": 0,
+    "check_runs_passed": 2,
+    "check_runs_failed": 0,
+    "conflicts_seen": 0,
+    "released_claims": 0,
+    "contributors": 0
+  },
+  "durations_seconds": {
+    "claim_to_first_pull_request_median": null,
+    "claim_to_first_pull_request_p90": null,
+    "open_to_merge_median": 6,
+    "open_to_merge_p90": 6,
+    "first_review_median": null,
+    "first_review_p90": null
+  },
+  "rates": {
+    "merge_rate": 1.0,
+    "first_check_pass_rate": 1.0
+  }
+}
