@@ -1,14 +1,19 @@
 name: Tidy
 
 # Deletes the branch claude/<issue> when its issue closes and no open pull
-# request uses the branch: the one piece of branch hygiene GitHub has no
-# setting for, and the chore the board otherwise lists for a person. The
-# merged pull request's branch is not this file's job: "Automatically
-# delete head branches" (docs/setup/github.md) covers it natively, with no
-# workflow run. A pull request closed without a merge keeps its branch
-# too: the work may be picked up again, and releasing a stale claim is the
-# coordinator routine's call. Runs on GITHUB_TOKEN alone; the deletion
-# starts the board workflow, which then drops the claim row.
+# request uses the branch, and with it every released/<issue>-<sha> the
+# board renamed a released claim's branch to: the one piece of branch
+# hygiene GitHub has no setting for, and the chore the board otherwise
+# lists for a person. The merged pull request's branch is not this file's
+# job: "Automatically delete head branches" (docs/setup/github.md) covers
+# it natively, with no workflow run. A pull request closed without a merge
+# keeps its branch too: the work may be picked up again, and releasing a
+# stale claim, and renaming its branch, is the board's run's (the
+# coordinator's step in it). Runs on GITHUB_TOKEN alone; the deletion
+# starts the board workflow, which then drops the claim row. The released
+# branches are listed by the prefix released/<issue>- (git/matching-refs,
+# an empty list when there is none), whose dash keeps issue 5 from
+# matching issue 50's.
 
 on:
   issues:
@@ -22,21 +27,28 @@ jobs:
   tidy:
     runs-on: ubuntu-latest
     steps:
-      - name: Delete the closed issue's claim branch when nothing open uses it
+      - name: Delete the closed issue's claim branches when nothing open uses them
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
           set -eu
-          branch="claude/$ISSUE"
-          open=$(gh pr list --repo "$REPO" --head "$branch" --state open --json number --jq length)
-          if [ "$open" != "0" ]; then
-            echo "an open pull request still uses $branch; leaving it"
-            exit 0
-          fi
-          if gh api --method DELETE "repos/$REPO/git/refs/heads/$branch" >/dev/null 2>&1; then
-            echo "deleted $branch"
-          else
-            echo "$branch was not there; nothing to do"
-          fi
+          delete_unless_used() {
+            branch="$1"
+            open=$(gh pr list --repo "$REPO" --head "$branch" --state open --json number --jq length)
+            if [ "$open" != "0" ]; then
+              echo "an open pull request still uses $branch; leaving it"
+              return 0
+            fi
+            if gh api --method DELETE "repos/$REPO/git/refs/heads/$branch" >/dev/null 2>&1; then
+              echo "deleted $branch"
+            else
+              echo "$branch was not there; nothing to do"
+            fi
+          }
+          delete_unless_used "claude/$ISSUE"
+          released=$(gh api "repos/$REPO/git/matching-refs/heads/released/$ISSUE-" --jq '.[].ref')
+          for ref in $released; do
+            delete_unless_used "${ref#refs/heads/}"
+          done
