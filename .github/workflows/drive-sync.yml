@@ -1,0 +1,236 @@
+name: Drive sync
+
+# Keeps the files a person picked in Google Drive or OneDrive in step with
+# a folder of this repository, both ways, and queues the review comments
+# they carry as tasks (tools/drive_sync.py, tools/docx_review.py,
+# docs/research/drive-sync.md). The control panel's Folders page writes
+# .github/symphony/drive.json and the secret SYMPHONY_DRIVE_REFRESH; with
+# either missing the run ends at once, so a repository that tracks no drive
+# spends a few seconds of a runner and nothing else.
+#
+# Each run first queues the new comments of the documents already on the
+# default branch, then asks the drive what changed: what changed only in
+# the drive rides the pull request from drive/sync, a branch of this
+# workflow's alone, force-pushed, with auto-merge armed; what changed only
+# here goes up in place; what changed on both goes up beside the drive's
+# copy, so nothing is lost. What the last run saw is kept as state.json on
+# the branch drive-state. GITHUB_TOKEN does all of it, so no other GitHub
+# secret is named: a push or a merge it makes starts no workflow, so the
+# run asks for the check on drive/sync itself (ci.yml's workflow_dispatch),
+# and the merge's documents are queued at the next run's first step. The
+# drive's refresh token is traded for an access token at the sign-in
+# service, which holds the client secrets; the repository holds none.
+#
+# Every half hour as the fallback, and from the panel's Sync now
+# (workflow_dispatch); the minute is an odd one, so it does not queue behind
+# every workflow set for the top of the hour. On a private repository each
+# run spends a minute of the plan's Actions minutes, about 1,440 a month, so
+# the half-hourly run starts only where the repository variable
+# SYMPHONY_DRIVE is on, which the panel's Track sets: a job its if skips
+# takes no runner and costs nothing, and the sync offers this workflow to
+# every adopted repository, most of which track no drive. Sync now runs
+# whatever the variable says.
+
+on:
+  schedule:
+    - cron: "11,41 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+# One group with papers.yml, since both open and tell the documents' tasks.
+concurrency:
+  group: papers
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.event.repository.fork == false && (github.event_name == 'workflow_dispatch' || vars.SYMPHONY_DRIVE == 'on')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      BRANCH: drive/sync
+      CONFIG: .github/symphony/drive.json
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Is a drive connected?
+        id: gate
+        env:
+          REFRESH: ${{ secrets.SYMPHONY_DRIVE_REFRESH }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f "$CONFIG" ] || [ -z "$REFRESH" ]; then
+            echo "no drive connected: $CONFIG or the secret SYMPHONY_DRIVE_REFRESH is missing" >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # What the last run saw, kept on drive-state, tells the gate below
+          # which folder the sync already keeps.
+          basic="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          if git -c http.extraheader="AUTHORIZATION: basic $basic" fetch --quiet origin drive-state 2>/dev/null; then
+            git show FETCH_HEAD:state.json > "$RUNNER_TEMP/state.json" || echo '{}' > "$RUNNER_TEMP/state.json"
+          else
+            echo '{}' > "$RUNNER_TEMP/state.json"
+          fi
+          # The folder is a plain relative path inside the repository that
+          # holds none of the repository's own files, such as scripts or
+          # tools, unless the sync already keeps it, or the run stops: the
+          # drive's editors would otherwise rewrite them through drive/sync,
+          # which merges by itself.
+          if ! python3 tools/drive_sync.py folder --config "$CONFIG" --state "$RUNNER_TEMP/state.json" \
+              --root . >> "$GITHUB_OUTPUT" 2> "$RUNNER_TEMP/gate.txt"; then
+            cat "$RUNNER_TEMP/gate.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Queue the new comments of the documents on the default branch
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FOLDER: ${{ steps.gate.outputs.folder }}
+        run: |
+          set -eu
+          [ -d "$FOLDER" ] || exit 0
+          # A document that cannot be read, or a refused call, is named and
+          # never stops the sync below.
+          python3 tools/docx_review.py tasks "$FOLDER" --gh > "$RUNNER_TEMP/queued.txt" ||
+            echo "some documents could not be queued; see the log" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s "$RUNNER_TEMP/queued.txt" ]; then
+            echo "queued: $(tr '\n' ' ' < "$RUNNER_TEMP/queued.txt")" >> "$GITHUB_STEP_SUMMARY"
+            # An issue GITHUB_TOKEN labels starts no workflow, so wake the
+            # workers here; with none registered their run ends at once.
+            gh workflow run workers.yml --repo "$REPO" || echo "could not wake the workers" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Start the accepted drive projects whose files are here now
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A project the drive organizer proposed and a person accepted
+          # (drive-organize.yml) gives its tasks to the workers once the
+          # sync has brought its folders in; a refused call never stops the
+          # sync below.
+          python3 tools/drive_organize.py ready --config "$CONFIG" --root . >> "$GITHUB_STEP_SUMMARY" ||
+            echo "the accepted drive projects could not be checked; see the log" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ask the drive what changed, and send up what changed here
+        id: drive
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          SYMPHONY_DRIVE_REFRESH: ${{ secrets.SYMPHONY_DRIVE_REFRESH }}
+          SYMPHONY_DRIVE_TOKEN_URL: ${{ vars.SYMPHONY_DRIVE_TOKEN_URL || 'https://symphony-signin.openspineconsortium.workers.dev/drive/token' }}
+        run: |
+          set -eu
+          # A drive that refuses the run leaves the state as it was written,
+          # with what went up recorded, and fails the job at its end.
+          status=0
+          python3 tools/drive_sync.py run --config "$CONFIG" --state "$RUNNER_TEMP/state.json" --root . \
+            --out "$RUNNER_TEMP/staging" --summary "$RUNNER_TEMP/summary.json" || status=$?
+          python3 - "$RUNNER_TEMP/summary.json" >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          import json, sys
+          summary = json.load(open(sys.argv[1]))
+          for key, label in (("pulled", "came down"), ("waiting", "wait for drive/sync"), ("pushed", "went up"),
+                             ("beside", "went up beside the drive's copy"), ("problems", "were not moved")):
+              for line in summary[key]:
+                  print(f"- {label}: {line}")
+          EOF
+          if [ "$status" -ne 0 ]; then
+            printf 'staged=false\nfailed=true\n' >> "$GITHUB_OUTPUT"
+          elif [ -d "$RUNNER_TEMP/staging" ]; then
+            echo "staged=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "staged=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rebuild drive/sync from the default branch and what is still to come down
+        if: steps.drive.conclusion == 'success' && steps.drive.outputs.failed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FOLDER: ${{ steps.gate.outputs.folder }}
+          STAGED: ${{ steps.drive.outputs.staged }}
+        run: |
+          set -eu
+          basic="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          url="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json url,isCrossRepository \
+            --jq '[.[] | select(.isCrossRepository | not)][0].url // ""')"
+          close() {
+            # What an open pull request holds, the drive has moved past:
+            # close it before it merges.
+            if [ -n "$url" ]; then
+              gh pr close "$url" --comment "$1"
+              echo "closed $url: $1" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          }
+          if [ "$STAGED" != "true" ]; then
+            close "The drive holds nothing more to bring in; closed by the drive sync."
+            exit 0
+          fi
+          git checkout --quiet -B "$BRANCH"
+          cp -R "$RUNNER_TEMP/staging/." .
+          git add -A -- "$FOLDER"
+          if git diff --cached --quiet; then
+            close "Nothing differs from the default branch; closed by the drive sync."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "Bring the drive's changed files in" -m "Made by .github/workflows/drive-sync.yml."
+          pushed=false
+          if git -c http.extraheader="AUTHORIZATION: basic $basic" fetch --quiet origin "$BRANCH" 2>/dev/null &&
+             [ "$(git rev-parse 'FETCH_HEAD^{tree}')" = "$(git rev-parse 'HEAD^{tree}')" ] &&
+             [ "$(git rev-parse 'FETCH_HEAD^')" = "$(git rev-parse 'HEAD^')" ]; then
+            echo "drive/sync holds this already" >> "$GITHUB_STEP_SUMMARY"
+          else
+            git -c http.extraheader="AUTHORIZATION: basic $basic" push --quiet --force origin "HEAD:refs/heads/$BRANCH"
+            pushed=true
+          fi
+          if [ -z "$url" ]; then
+            printf '%s\n\n%s\n' "Files that changed in the connected drive, brought in by the drive sync." \
+              "It merges by itself once the check is green; the documents' new comments are queued at the next sync." \
+              > "$RUNNER_TEMP/body.md"
+            url="$(gh pr create --repo "$REPO" --base "$DEFAULT_BRANCH" --head "$BRANCH" \
+              --title "Bring in the drive's changed files" --body-file "$RUNNER_TEMP/body.md")"
+            pushed=true
+          fi
+          echo "drive/sync: $url" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$pushed" = "true" ]; then
+            gh workflow run ci.yml --repo "$REPO" --ref "$BRANCH" || echo "could not ask for the check" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$(gh pr view "$url" --repo "$REPO" --json autoMergeRequest --jq '.autoMergeRequest != null')" != "true" ]; then
+            id="$(gh pr view "$url" --repo "$REPO" --json id --jq .id)"
+            gh api graphql -f id="$id" \
+              -f query='mutation($id: ID!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: MERGE}) { clientMutationId } }' \
+              > /dev/null 2>&1 || echo "auto-merge not armed; the pull request waits for a merge" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep what this run saw on drive-state
+        if: always() && steps.drive.conclusion == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          basic="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          state="$RUNNER_TEMP/state-repo"
+          git init --quiet "$state"
+          cp "$RUNNER_TEMP/state.json" "$state/state.json"
+          git -C "$state" add state.json
+          git -C "$state" -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "What the drive sync saw"
+          git -C "$state" -c http.extraheader="AUTHORIZATION: basic $basic" \
+            push --quiet --force "https://github.com/$REPO" "HEAD:refs/heads/drive-state"
+
+      - name: Fail the run where the drive refused it
+        if: steps.drive.outputs.failed == 'true'
+        run: |
+          echo "the drive or the sign-in service refused the run; see the step above" >> "$GITHUB_STEP_SUMMARY"
+          exit 1

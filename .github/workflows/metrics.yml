@@ -4,17 +4,33 @@ name: Metrics
 # ran here over the last 30 days, in aggregates only: counts of claims, pull
 # requests, merges, reviews, check runs, conflicts, released claims and
 # contributors, the median and 90th percentile of three waits, and two
-# rates (docs/setup/metrics.md lists every key and how each lines up with
-# what coordbench and CooperBench measure). tools/metrics.py collect reads
-# them from the REST API with GITHUB_TOKEN alone and writes no name, login,
-# title, branch name, URL, issue number or text, so the file can be shared
-# without sharing the project. OpenSpineConsortium's collector reads this
-# file and JUDGE.json from the branch metrics, and only in a repository that
-# installed the Symphony App; nothing here sends anything anywhere.
+# rates, the same pull requests counted by work setting and in pairs (who
+# worked beside whom, by person and Claude Code session), and what the work
+# cost in tokens and estimated dollars, with work done alone set beside
+# work done in parallel (economics and coordination); the costs come from
+# the Symphony-Usage trailers sessions put on their commits and the usage
+# records the Claude workflows upload as artifacts, which actions: read
+# lets the run list and download, and GitHub's Actions cache carries the
+# records read so far to the next run, so each run downloads only the new
+# ones; docs/setup/metrics.md lists every key and how each lines up with what
+# coordbench and CooperBench measure. Beside it, PROFILE.json sums the
+# Symphony-Profile lines on the same pull requests' commits and the runs'
+# profiles (tools/profile.py), by work setting and alone against parallel.
+# tools/metrics.py collect reads them from the REST API with GITHUB_TOKEN
+# alone and writes no name, login, session link, title, branch name, file
+# name, URL, issue number or text, so the files can be shared without
+# sharing the project. OpenSpineConsortium's collector reads METRICS.json
+# and JUDGE.json from the branch metrics, and only in a repository that
+# installed the Symphony App; it does not read PROFILE.json, whose keys stay
+# the repository's own until the Apps' privacy statement lists them, and
+# nothing here sends anything anywhere.
 # Sharing is on by default, with one switch two ways: the word off in
-# .github/symphony-metrics on the default branch, or the repository variable
-# SDLC_METRICS set to off. Off from either wins, and the run then writes
-# {"schema": "sdlc-metrics/1", "sharing": "off"} and calls no API.
+# .github/symphony-metrics on the default branch (or in
+# .github/sdlc-metrics, its name before the rename, which a repository set
+# up before it carries), or the repository variable SDLC_METRICS set to
+# off. Off from any of them wins, and the run then writes
+# {"schema": "sdlc-metrics/1", "sharing": "off"}, PROFILE.json says off the
+# same way, and it calls no API.
 #
 # The run is daily at 03:43 UTC, before the collector's read at 04:17, so
 # what the collector reads is the day's; by hand; and on a push to the
@@ -27,30 +43,34 @@ name: Metrics
 #
 # The branch metrics is written the way the board's branch is: a commit
 # built from the files alone (hash-object, mktree, commit-tree; the checkout
-# is never touched), so the default branch carries no metrics commit and
-# its protection never stands in the way; a ruleset must target only the
-# default branch for the same reason (docs/setup/github.md). The commit
-# holds the new METRICS.json and the JUDGE.json the branch already had,
-# which a maintainer's judge (tools/metrics.py judge, on their own machine
-# and their own Claude account) pushes as an ordinary commit on top. The run
-# replaces the branch with --force-with-lease naming the commit it fetched,
-# or nothing when there was no branch, so a judge push that landed in
-# between is never lost: the lease fails, and the run reads the branch again
-# and tries once more. A branch metrics that holds anything but those two
-# files is the project's own, there before this workflow came (a repository
-# that adopted the template, or an owner who started one), and replacing it
-# would lose it: the run says so, says to rename it, and pushes nothing. It
-# writes only when METRICS.json changed apart from its generated_at, and a
-# push made with GITHUB_TOKEN starts no workflow. The job is skipped in the
-# template repository itself, scheduled runs included; in a fork, whose
-# branch metrics is a frozen copy of the original's from the day the fork
-# was made, so a run there would write metrics of its own beside the
-# original's JUDGE.json; and on a push to any branch but the default one.
-# Its first step ends the run wherever the marker folder .template/ still
-# is (a template whose "Template repository" box was never ticked, a copy
-# whose template-init has not run), as the board's does. Values reach the
-# shell only through env. The schedule's minute is an odd one, so the run
-# does not queue behind every workflow set for the top of the hour.
+# is never touched), so the default branch carries no metrics commit and its
+# protection never stands in the way; a ruleset must target only the default
+# branch for the same reason (docs/setup/github.md). The commit holds the
+# new METRICS.json and PROFILE.json and the JUDGE.json the branch already
+# had, which a maintainer's judge (tools/metrics.py judge, on their own
+# machine and their own Claude account) pushes as an ordinary commit on top.
+# The run replaces the branch with --force-with-lease naming the commit it
+# fetched, or nothing when there was no branch, so a judge push that landed
+# in between is never lost: the lease fails, and the run reads the branch
+# again and tries once more. A branch metrics that holds anything but those
+# three files is the project's own, there before this workflow came (a
+# repository that adopted the template, or an owner who started one), and
+# replacing it would lose it: the run says so, says to rename it, and pushes
+# nothing. A copy of this workflow from before PROFILE.json counts it as
+# such a file, so a metrics.yml rolled back past the profile's sums stops
+# with that advice: delete PROFILE.json from the branch metrics instead of
+# renaming the branch, and the older workflow writes again. It writes only when METRICS.json or PROFILE.json changed apart
+# from its generated_at, and a push made with GITHUB_TOKEN starts no
+# workflow. The job is skipped in the template repository itself, scheduled
+# runs included; in a fork, whose branch metrics is a frozen copy of the
+# original's from the day the fork was made, so a run there would write
+# metrics of its own beside the original's JUDGE.json; and on a push to any
+# branch but the default one. Its first step ends the run wherever the
+# marker folder .template/ still is (a template whose "Template repository"
+# box was never ticked, a copy whose template-init has not run), as the
+# board's does. Values reach the shell only through env. The schedule's
+# minute is an odd one, so the run does not queue behind every workflow set
+# for the top of the hour.
 # In crowd mode (docs/setup/crowdsourcing.md) it runs as anywhere: it names
 # no secret but GITHUB_TOKEN and starts nothing on anyone's subscription.
 
@@ -66,6 +86,7 @@ permissions:
   pull-requests: read
   issues: read
   checks: read
+  actions: read
 
 concurrency:
   group: metrics
@@ -98,14 +119,39 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # The Actions runs' usage records read so far, so this run downloads
+      # only the new ones (docs/setup/metrics.md, What the work cost). The
+      # key is this run's and the restore takes the newest earlier one; a
+      # missing cache only means the next run reads more.
+      - name: Restore the usage records read before
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/usage-records.json
+          key: symphony-usage-records-${{ github.run_id }}
+          restore-keys: symphony-usage-records-
+
       - name: Collect the aggregates
         if: steps.gate.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SDLC_METRICS: ${{ vars.SDLC_METRICS }}
-        run: python3 tools/metrics.py collect --repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/METRICS.json"
+        run: >-
+          python3 tools/metrics.py collect --repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/METRICS.json"
+          --usage-cache "$RUNNER_TEMP/usage-records.json" --profile-out "$RUNNER_TEMP/PROFILE.json"
 
-      - name: Write METRICS.json to the branch metrics when it changed
+      # A run that wrote no records file (sharing off, or the breakdown left
+      # out with nothing restored) has nothing to keep; the save then only
+      # warns, and never fails the run.
+      - name: Keep the usage records for the next run
+        if: steps.gate.outputs.skip != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/usage-records.json
+          key: symphony-usage-records-${{ github.run_id }}
+
+      - name: Write METRICS.json and PROFILE.json to the branch metrics when they changed
         if: steps.gate.outputs.skip != 'true'
         env:
           GIT_AUTHOR_NAME: github-actions[bot]
@@ -114,20 +160,29 @@ jobs:
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
           new="$RUNNER_TEMP/METRICS.json"
+          profile="$RUNNER_TEMP/PROFILE.json"
           # The branch is this workflow's to replace only while it holds
-          # nothing but the two files it and the judge write: any other
+          # nothing but the three files it and the judge write: any other
           # path means a branch the project had before, which the push
           # would lose. It prints those paths, and like grep it succeeds
           # only when there is one.
           foreign_files() {
-            git ls-tree --name-only "$1" | grep -v -x -e METRICS.json -e JUDGE.json
+            git ls-tree --name-only "$1" | grep -v -x -e METRICS.json -e PROFILE.json -e JUDGE.json
+          }
+          # Whether the branch's file of this name holds what the run wrote
+          # at the path given, generated_at aside.
+          same_as_branch() {
+            git show "$previous:$1" > "$RUNNER_TEMP/previous-$1" 2>/dev/null \
+              && python3 tools/metrics.py unchanged "$RUNNER_TEMP/previous-$1" "$2"
           }
           # One attempt: read the branch as it is now, keep its JUDGE.json,
-          # put the new METRICS.json beside it, and push only if the branch
-          # is still the commit that was read. Each step that can fail says
-          # so, since a function called in a condition runs without -e. A
-          # foreign branch returns 2, so the caller can tell it from a lease
-          # that failed, which alone is worth a second attempt.
+          # put the new METRICS.json and PROFILE.json beside it (the
+          # branch's PROFILE.json where the run wrote none), and push only
+          # if the branch is still the commit that was read. Each step that
+          # can fail says so, since a function called in a condition runs
+          # without -e. A foreign branch returns 2, so the caller can tell
+          # it from a lease that failed, which alone is worth a second
+          # attempt.
           write_metrics() {
             previous=""
             git update-ref -d refs/remotes/origin/metrics 2>/dev/null || true
@@ -141,14 +196,19 @@ jobs:
               echo "Rename it (git branch -m metrics NAME in a clone, then push NAME and delete metrics, or the repository's branches page) and the next run starts a branch metrics of its own."
               return 2
             fi
-            if [ -n "$previous" ] \
-               && git show "$previous:METRICS.json" > "$RUNNER_TEMP/previous.json" 2>/dev/null \
-               && python3 tools/metrics.py unchanged "$RUNNER_TEMP/previous.json" "$new"; then
+            if [ -n "$previous" ] && same_as_branch METRICS.json "$new" \
+               && { [ ! -e "$profile" ] || same_as_branch PROFILE.json "$profile"; }; then
               echo "metrics unchanged"
               return 0
             fi
             blob="$(git hash-object -w "$new")" || return 1
             entries="$(printf '100644 blob %s\tMETRICS.json' "$blob")"
+            if [ -e "$profile" ]; then
+              sums="$(git hash-object -w "$profile")" || return 1
+              entries="$entries$(printf '\n100644 blob %s\tPROFILE.json' "$sums")"
+            elif [ -n "$previous" ] && sums="$(git rev-parse --verify --quiet "$previous:PROFILE.json")"; then
+              entries="$entries$(printf '\n100644 blob %s\tPROFILE.json' "$sums")"
+            fi
             if [ -n "$previous" ] && judge="$(git rev-parse --verify --quiet "$previous:JUDGE.json")"; then
               entries="$entries$(printf '\n100644 blob %s\tJUDGE.json' "$judge")"
             fi
