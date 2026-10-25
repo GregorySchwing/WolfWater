@@ -7,7 +7,7 @@ branch merges cleanly with the default branch as it is now, or the answer
 is "main moved" and the default branch stays as it was. What changes from
 one place to another is who merges (the owner, the gate itself, or
 auto-merge on a green check), how a branch brings a moved default branch in
-(accounts rebase, team members merge it in), and where the branches live
+(a worker rebases on it or merges it in), and where the branches live
 (GitHub, a bare repository, memory in a test). The first two are a Policy.
 The last is a World, which an adapter implements.
 
@@ -48,9 +48,9 @@ OWNER, GATE, AUTO_MERGE = "owner", "gate", "auto-merge"
 WHO_MERGES = (OWNER, GATE, AUTO_MERGE)
 MOVERS = {OWNER: "the owner", GATE: "the merge gate", AUTO_MERGE: "auto-merge"}
 
-# How a branch brings a moved default branch in: an account rebases and
-# pushes with --force-with-lease (docs/agents/PROTOCOL.md); a team member
-# merges it in, so nobody force-pushes (docs/agents/TEAM.md).
+# How a branch brings a moved default branch in: a worker rebases and
+# pushes with --force-with-lease, or merges it in, which needs no forced
+# push and is what a worker in Actions does (docs/agents/PROTOCOL.md).
 REBASE, MERGE = "rebase", "merge"
 BRING_MAIN_IN = (REBASE, MERGE)
 
@@ -115,9 +115,9 @@ class Policy:
         return f"{self.remote}/{self.default_branch}"
 
 
-# The two ways of working docs/agents/PROTOCOL.md describes: an account
-# rebases and the owner merges; a team member merges main in and lands by
-# auto-merge on a green check.
+# The two ways a worker lands, as docs/agents/PROTOCOL.md describes: it
+# rebases and the owner merges, or, when its file says "lands":
+# "auto-merge", it merges main in and lands by auto-merge on a green check.
 ACCOUNT_POLICY = Policy()
 TEAM_POLICY = Policy(bring_main_in=MERGE, who_merges=AUTO_MERGE)
 
@@ -178,11 +178,16 @@ class MergeRefused(GateError):
 class Standing:
     """How a branch stands to the default branch: a word from STANDINGS (or
     NO_BRANCH, NOTHING_NEW), main's commit, and the conflicting files when
-    the world can name them."""
+    the world can name them. level says whether a clean branch is known to
+    be level with the default branch, as git and the memory world know it;
+    GitHub's word clean says only that the branch merges as it stands,
+    since a rule that does not ask for an up-to-date branch, or none, gives
+    it to a branch that is behind (F16)."""
 
     word: str
     main: str = ""
     conflicts: tuple = ()
+    level: bool = True
 
 
 @dataclass
@@ -274,8 +279,8 @@ class PullRequest:
 class Queue:
     """The issues and pull requests the gate decides over. given maps each
     issue number to the agent it was given to; in a closed queue each agent
-    claims only its own, as team mode's members take only the tasks the
-    lead gave them, and in an open one anybody claims any. base_ref is the
+    claims only its own, as an issue a worker's label names is that
+    worker's alone, and in an open one anybody claims any. base_ref is the
     commit the work began from. The caller holds a lock around every call
     that reads or changes the queue."""
 
@@ -621,12 +626,14 @@ def main_moved_text(policy, merge):
 
 # --- release ----------------------------------------------------------------
 
-def due_for_release(policy, world, last_commits):
+def due_for_release(policy, world, last_commits, released=None):
     """The claims to release, by the world's clock: those whose branch has
     had no commit for longer than the policy's idle_after. last_commits maps
     a claim's branch, or its issue number as text, to its last commit's
-    time."""
-    return claims.release_due(last_commits, world.now(), policy.idle_after)
+    time; released maps the same keys to the time of the latest release
+    comment on each claim's issue, so a claim already released is not due
+    again (claims.release_due)."""
+    return claims.release_due(last_commits, world.now(), policy.idle_after, released)
 
 
 # --- status and board -------------------------------------------------------
@@ -671,7 +678,8 @@ def standing_sentence(policy, standing, main, number):
     branch, at = policy.branch_of(number), f"{name} at {short(main)}"
     conflicts = ", ".join(standing.conflicts) or "some files"
     sentences = {
-        CLEAN: f"Against {at}: clean, up to date with {name} and merging cleanly.",
+        CLEAN: (f"Against {at}: clean, up to date with {name} and merging cleanly." if standing.level
+                else f"Against {at}: clean; it merges cleanly with {name} as it stands."),
         BEHIND: f"Against {at}: behind; {name} moved since {branch} branched, but it still merges "
                 f"cleanly, so the gate can merge it as it is.",
         CONFLICTING: f"Against {at}: conflicting; main moved and {branch} no longer merges cleanly with it "
