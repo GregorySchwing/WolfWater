@@ -1,0 +1,259 @@
+# One Claude account's subscription token for the control panel's Tokens
+# page (Add a Claude account), minted on a runner in about a minute
+# instead of in a Codespace, which took minutes to start. The page opens
+# an issue, starts this workflow with the issue's number and the public
+# key GitHub's secrets API gave it, and watches the issue: the run posts
+# claude's sign-in link there, the person signs in and the page posts the
+# code claude.ai shows back as the person, and the run posts the token
+# sealed for that key, which the page stores as the slot's secret. The
+# token is never on the page, in the issue or in the log
+# (tools/token_run.py, docs/setup/claude-tokens.md). The run holds no
+# secret and needs none: GITHUB_TOKEN only comments, and only someone who
+# may write here can start it. For someone who may write here but is not
+# an owner of the organization, whom GitHub lets write no organization
+# secret, the page asks for store: pool, and the job store does the saving
+# itself with the SymphonyBoard App's key, into a free slot of the
+# organization's pool only, marked as theirs (the owner's choice of
+# 2026-10-18). That job runs in the environment token-store, which an owner
+# limits to the default branch, so only the default branch's script ever
+# holds the App's token, and mints it only once claude has gone, so no
+# process of claude's can read it. In crowd mode it never runs, since the
+# repository then holds no Claude token (docs/setup/crowdsourcing.md).
+#
+# GitHub takes a workflow dispatch only from someone who may write, so the
+# pool's two jobs also start on an issue opened with the line
+# <!-- symphony-token: lend --> or <!-- symphony-token: manage --> first:
+# anyone who may open an issue here, a member who may only read or someone
+# with no role at all, lends their token to the pool, with "organization"
+# on the second line for a lend with no say, which the organization's
+# owners place where they choose, and later lists or deletes it (the
+# owner, 2026-10-19: "it can start on an issue anyone can open"). The
+# issue's author is the run's actor, only their own comment counts as the
+# code, and the run closes the issue when it is done.
+#
+# A repository of an organization that has no workflow Token of its own, as
+# one adopted for the protocol alone had none before the template's sync
+# (sync.yml) and symphony-start's adoption brought it, still takes a token: the page
+# runs this workflow in a repository of the organization that has it, with
+# lend_to naming the one it shows, and the run lends the token there. Only
+# a dispatch carries lend_to, so a run an issue started lends only here.
+name: Token
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: the issue the Tokens page opened for this sign-in
+        required: true
+      key:
+        description: the secrets public key, in base64, to seal the token for
+        required: false
+      key_id:
+        description: that key's id
+        required: false
+      store:
+        description: pool, for the run to store the token in the organization's pool itself; manage, to list, revoke or delete the person's own
+        required: false
+      manage:
+        description: with store manage, list, revoke or delete
+        required: false
+      target:
+        description: with manage revoke, the id of the repository to take the token back from
+        required: false
+      lend_to:
+        description: with store pool, the id of the organization's repository to lend the token to in place of this one, which has the workflow where that one has not
+        required: false
+
+permissions: {}
+
+# an issue that is no token run's starts this workflow too, and every job
+# skips; each issue has a group of its own, so it cancels nobody's run
+concurrency:
+  group: token-${{ inputs.issue || github.event.issue.number }}
+
+jobs:
+  mint:
+    if: github.event_name == 'workflow_dispatch' && vars.CLAUDE_CROWD != 'true' && inputs.store != 'pool' && inputs.store != 'manage'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    env:
+      ISSUE: ${{ inputs.issue || github.event.issue.number }}
+      ACTOR: ${{ github.event_name == 'issues' && github.event.issue.user.login || github.triggering_actor }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Claude Code
+        run: npm install --global --no-fund --no-audit @anthropic-ai/claude-code
+      - name: Sign in and seal the token
+        env:
+          KEY: ${{ inputs.key }}
+          KEY_ID: ${{ inputs.key_id }}
+        run: python3 tools/token_run.py
+      # a step that failed before the script could say so, so the page is told at once
+      - name: If a step failed, say why (skipped when all went well)
+        if: failure()
+        run: python3 tools/token_run.py fail
+
+  store:
+    if: >-
+      vars.CLAUDE_CROWD != 'true' && vars.SDLC_APP_ID != '' && (
+        (github.event_name == 'workflow_dispatch' && inputs.store == 'pool') ||
+        (github.event_name == 'issues' && startsWith(github.event.issue.body, '<!-- symphony-token: lend -->')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: token-store
+    permissions:
+      contents: read
+      issues: write
+    env:
+      ISSUE: ${{ inputs.issue || github.event.issue.number }}
+      ACTOR: ${{ github.event_name == 'issues' && github.event.issue.user.login || github.triggering_actor }}
+      GITHUB_TOKEN: ${{ github.token }}
+      STORE_ORG: ${{ github.repository_owner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # A person who has a token in the pool already gets it lent here and no
+      # new one: one token per person, lent to the repositories they choose
+      # (the owner's choice of 2026-10-19). The App's token for this look is
+      # revoked by the script before claude ever starts, and the step fails
+      # where it cannot be, so the sign-in never runs beside a live one.
+      - uses: actions/create-github-app-token@v3
+        id: look-token
+        with:
+          app-id: ${{ vars.SDLC_APP_ID }}
+          private-key: ${{ secrets.SDLC_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Lend the person's token here if they have one
+        id: look
+        env:
+          APP_TOKEN: ${{ steps.look-token.outputs.token }}
+          REPO_ID: ${{ github.repository_id }}
+          LEND_TO: ${{ inputs.lend_to }}
+        run: python3 tools/token_run.py look
+      - name: Install Claude Code
+        if: steps.look.outputs.found != 'true'
+        run: npm install --global --no-fund --no-audit @anthropic-ai/claude-code
+      - name: Sign in
+        if: steps.look.outputs.found != 'true'
+        env:
+          TOKEN_FILE: ${{ runner.temp }}/claude-token
+        run: python3 tools/token_run.py
+      # minted only now, once claude has gone, and with every permission the
+      # installation has, since the action names no variables permission
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        if: steps.look.outputs.found != 'true'
+        with:
+          app-id: ${{ vars.SDLC_APP_ID }}
+          private-key: ${{ secrets.SDLC_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Store the token in a free slot
+        if: steps.look.outputs.found != 'true'
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO_ID: ${{ github.repository_id }}
+          LEND_TO: ${{ inputs.lend_to }}
+          TOKEN_FILE: ${{ runner.temp }}/claude-token
+        run: python3 tools/token_run.py store
+      - name: If a step failed, say why (skipped when all went well)
+        if: failure()
+        run: python3 tools/token_run.py fail
+      - name: Delete the held token from the runner (runs every time)
+        if: always()
+        env:
+          TOKEN_FILE: ${{ runner.temp }}/claude-token
+        run: rm -f "$TOKEN_FILE"
+
+  # A person's own token: where it is lent, taken back from one repository,
+  # or deleted; no sign-in, and only the token whose settings name them.
+  manage:
+    if: >-
+      vars.CLAUDE_CROWD != 'true' && vars.SDLC_APP_ID != '' && (
+        (github.event_name == 'workflow_dispatch' && inputs.store == 'manage') ||
+        (github.event_name == 'issues' && startsWith(github.event.issue.body, '<!-- symphony-token: manage -->')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: token-store
+    permissions:
+      contents: read
+      issues: write
+    env:
+      ISSUE: ${{ inputs.issue || github.event.issue.number }}
+      ACTOR: ${{ github.event_name == 'issues' && github.event.issue.user.login || github.triggering_actor }}
+      GITHUB_TOKEN: ${{ github.token }}
+      STORE_ORG: ${{ github.repository_owner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ vars.SDLC_APP_ID }}
+          private-key: ${{ secrets.SDLC_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: List, revoke or delete the person's token
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO_ID: ${{ github.repository_id }}
+          MANAGE: ${{ inputs.manage }}
+          TARGET_REPO_ID: ${{ inputs.target }}
+        run: python3 tools/token_run.py manage
+      - name: If a step failed, say why (skipped when all went well)
+        if: failure()
+        run: python3 tools/token_run.py fail
+
+  # where the App's settings are not, the pool's two jobs skip, so no run
+  # makes their environment, and the page and the issue hear why
+  no-app:
+    if: >-
+      vars.CLAUDE_CROWD != 'true' && vars.SDLC_APP_ID == '' && (
+        (github.event_name == 'workflow_dispatch' && (inputs.store == 'pool' || inputs.store == 'manage')) ||
+        startsWith(github.event.issue.body, '<!-- symphony-token: lend -->') ||
+        startsWith(github.event.issue.body, '<!-- symphony-token: manage -->'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Say that the pool is not kept here
+        env:
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          ACTOR: ${{ github.event_name == 'issues' && github.event.issue.user.login || github.triggering_actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+          FAIL_WHY: this repository does not hold the SymphonyBoard App's settings (the variable SDLC_APP_ID and its key), which only the App's own organization keeps, so it stores no token into a pool; an owner of the organization adds one with Add Token
+        run: python3 tools/token_run.py fail
+
+  # in crowd mode the repository holds no Claude token, and the page hears so
+  crowd:
+    if: >-
+      vars.CLAUDE_CROWD == 'true' && (github.event_name == 'workflow_dispatch' ||
+        startsWith(github.event.issue.body, '<!-- symphony-token: lend -->') ||
+        startsWith(github.event.issue.body, '<!-- symphony-token: manage -->'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Say that crowd mode holds no token
+        env:
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          ACTOR: ${{ github.event_name == 'issues' && github.event.issue.user.login || github.triggering_actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+          FAIL_WHY: the repository is in crowd mode (its variable CLAUDE_CROWD is true), so it holds no Claude token
+        run: python3 tools/token_run.py fail
